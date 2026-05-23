@@ -7,7 +7,7 @@ def index_bill_file(conn: Connection, json_path: Path, archive_root: Path) -> No
     with open(json_path, encoding="utf-8") as f:
         b = json.load(f)
 
-    rel_path = str(json_path.resolve().relative_to(archive_root.resolve()))
+    rel_path = json_path.resolve().relative_to(archive_root.resolve()).as_posix()
 
     conn.execute(
         """INSERT OR REPLACE INTO bills
@@ -59,7 +59,7 @@ def index_event_file(conn: Connection, json_path: Path, archive_root: Path) -> N
     with open(json_path, encoding="utf-8") as f:
         e = json.load(f)
 
-    rel_path = str(json_path.resolve().relative_to(archive_root.resolve()))
+    rel_path = json_path.resolve().relative_to(archive_root.resolve()).as_posix()
     conn.execute(
         """INSERT OR REPLACE INTO events
            (id, body_id, body_name, date, location, last_modified, path)
@@ -99,7 +99,7 @@ def index_event_file(conn: Connection, json_path: Path, archive_root: Path) -> N
 def index_person_file(conn: Connection, json_path: Path, archive_root: Path) -> None:
     with open(json_path, encoding="utf-8") as f:
         p = json.load(f)
-    rel_path = str(json_path.resolve().relative_to(archive_root.resolve()))
+    rel_path = json_path.resolve().relative_to(archive_root.resolve()).as_posix()
     conn.execute(
         """INSERT OR REPLACE INTO people
            (slug, id, full_name, is_active, start_date, end_date, path)

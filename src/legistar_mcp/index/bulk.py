@@ -4,10 +4,19 @@ from sqlite3 import Connection
 from .build import index_bill_file, index_event_file, index_person_file
 
 
+# Real archive groups bills by Legistar type. All four are in-scope for v1
+# because agency mentions appear across resolutions and land-use bills,
+# not just introductions.
+_BILL_TYPE_DIRS = ("introduction", "land_use", "resolution", "resubmit")
+
+
 def _bill_paths(root: Path):
-    if (root / "introduction").exists():
-        yield from sorted((root / "introduction").rglob("*.json"))
-    elif (root / "bills").exists():
+    found_any = False
+    for d in _BILL_TYPE_DIRS:
+        if (root / d).exists():
+            found_any = True
+            yield from sorted((root / d).rglob("*.json"))
+    if not found_any and (root / "bills").exists():
         yield from sorted((root / "bills").glob("*.json"))
 
 
@@ -38,7 +47,7 @@ def build_all(
     stats = {"bills": 0, "events": 0, "people": 0}
 
     for p in _bill_paths(archive_root):
-        rel = str(p.resolve().relative_to(archive_root.resolve()))
+        rel = p.resolve().relative_to(archive_root.resolve()).as_posix()
         if incremental:
             lm = _last_modified_of(p)
             if seen_bills.get(rel) == lm:
@@ -47,7 +56,7 @@ def build_all(
         stats["bills"] += 1
 
     for p in _event_paths(archive_root):
-        rel = str(p.resolve().relative_to(archive_root.resolve()))
+        rel = p.resolve().relative_to(archive_root.resolve()).as_posix()
         if incremental:
             lm = _last_modified_of(p)
             if seen_events.get(rel) == lm:

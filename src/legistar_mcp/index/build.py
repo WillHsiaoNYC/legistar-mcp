@@ -53,3 +53,44 @@ def index_bill_file(conn: Connection, json_path: Path, archive_root: Path) -> No
                 "INSERT OR IGNORE INTO sponsors (bill_id, person_slug, sequence) VALUES (?, ?, ?)",
                 (b["ID"], slug, i),
             )
+
+
+def index_event_file(conn: Connection, json_path: Path, archive_root: Path) -> None:
+    with open(json_path, encoding="utf-8") as f:
+        e = json.load(f)
+
+    rel_path = str(json_path.resolve().relative_to(archive_root.resolve()))
+    conn.execute(
+        """INSERT OR REPLACE INTO events
+           (id, body_id, body_name, date, location, last_modified, path)
+           VALUES (?,?,?,?,?,?,?)""",
+        (
+            e["ID"], e.get("BodyID"), e.get("BodyName"),
+            e.get("Date"), e.get("Location"),
+            e.get("LastModified"), rel_path,
+        ),
+    )
+
+    # Clear and reinsert per-item FTS rows
+    old = conn.execute(
+        "SELECT fts_rowid FROM events_fts_map WHERE event_id = ?", (e["ID"],)
+    ).fetchall()
+    for r in old:
+        conn.execute("DELETE FROM events_fts WHERE rowid = ?", (r["fts_rowid"],))
+    conn.execute("DELETE FROM events_fts_map WHERE event_id = ?", (e["ID"],))
+
+    next_rowid = (
+        conn.execute("SELECT COALESCE(MAX(fts_rowid), 0) FROM events_fts_map").fetchone()[0] + 1
+    )
+    for item in e.get("Items") or []:
+        seq = item.get("AgendaSequence") or item.get("MinutesSequence") or 0
+        conn.execute(
+            "INSERT INTO events_fts_map (fts_rowid, event_id, item_sequence) VALUES (?, ?, ?)",
+            (next_rowid, e["ID"], seq),
+        )
+        conn.execute(
+            "INSERT INTO events_fts (rowid, item_title, agenda_note, minutes_note) VALUES (?, ?, ?, ?)",
+            (next_rowid, item.get("Title") or "", item.get("AgendaNote") or "",
+             item.get("MinutesNote") or ""),
+        )
+        next_rowid += 1

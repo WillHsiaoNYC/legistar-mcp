@@ -21,17 +21,22 @@ def test_open_db_enables_foreign_keys(tmp_path):
 
 def test_open_db_backfills_guid_column_on_legacy_db(tmp_path):
     """Simulate an existing DB created before the guid column was added: server
-    boots via open_db() and the migration must add the column, otherwise the
-    next search_bills query will fail with 'no such column: bills.guid'.
+    boots via open_db() and the migration must add the column to both bills
+    and events, otherwise queries will fail with 'no such column: ...guid'.
     """
     db_path = tmp_path / "legacy.db"
     legacy = sqlite3.connect(db_path)
     legacy.execute(
         "CREATE TABLE bills (id INTEGER PRIMARY KEY, file TEXT UNIQUE NOT NULL)"
     )
+    legacy.execute(
+        "CREATE TABLE events (id INTEGER PRIMARY KEY, path TEXT NOT NULL)"
+    )
     legacy.commit()
     legacy.close()
 
     conn = open_db(db_path)
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(bills)")}
-    assert "guid" in cols
+    bill_cols = {r["name"] for r in conn.execute("PRAGMA table_info(bills)")}
+    event_cols = {r["name"] for r in conn.execute("PRAGMA table_info(events)")}
+    assert "guid" in bill_cols
+    assert "guid" in event_cols

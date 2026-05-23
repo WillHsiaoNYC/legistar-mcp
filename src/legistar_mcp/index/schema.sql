@@ -51,6 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_people_active ON people(is_active);
 
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY,
+    guid TEXT,                        -- Legistar event GUID (needed to build MeetingDetail URL)
     body_id INTEGER,
     body_name TEXT,
     date TEXT,                        -- ISO datetime

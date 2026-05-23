@@ -19,6 +19,13 @@ _SNIPPET_FIELDS: tuple[tuple[str, str], ...] = (
 _MAX_MENTIONS_PER_EVENT = 5
 
 
+def _legistar_url(event_id: int | None, guid: str | None) -> str | None:
+    """Build the public Legistar MeetingDetail URL, or None if missing parts."""
+    if not event_id or not guid:
+        return None
+    return f"https://legistar.council.nyc.gov/MeetingDetail.aspx?ID={event_id}&GUID={guid}"
+
+
 def search_events(
     conn: Connection,
     query: str | None = None,
@@ -53,7 +60,7 @@ def search_events(
         params.append(committee)
 
     sql = (
-        "SELECT DISTINCT events.id, events.body_name, events.date, events.location "
+        "SELECT DISTINCT events.id, events.guid, events.body_name, events.date, events.location "
         "FROM events" + join
     )
     if where:
@@ -62,6 +69,8 @@ def search_events(
     params.append(limit)
 
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    for r in rows:
+        r["legistar_url"] = _legistar_url(r.get("id"), r.pop("guid", None))
 
     # Agency mode: build per-event mentions by reading source JSON for each match.
     # A council meeting can have 100+ Items × 3 fields × N alias phrases; without
@@ -113,4 +122,6 @@ def get_event(conn: Connection, archive_root: Path, id: int) -> dict | None:
     if not row:
         return None
     with open(Path(archive_root) / row["path"], encoding="utf-8") as f:
-        return json.load(f)
+        event = json.load(f)
+    event["LegistarURL"] = _legistar_url(event.get("ID"), event.get("GUID"))
+    return event

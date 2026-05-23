@@ -30,3 +30,15 @@ def test_search_events_date_filter_rejects_out_of_range(indexed_db):
     # one fixture row meant the >= constraint passed trivially).
     results = search_events(indexed_db, date_from="2099-01-01", limit=5)
     assert results == []
+
+
+def test_search_events_results_include_legistar_url(indexed_db):
+    results = search_events(indexed_db, limit=5)
+    assert results
+    hit = results[0]
+    assert hit["legistar_url"] == (
+        "https://legistar.council.nyc.gov/MeetingDetail.aspx"
+        f"?ID={hit['id']}&GUID=2E5AFBF9-B5AA-4295-B8F2-3368AB913D57"
+    )
+    # The transient guid column from the SELECT must not leak into output.
+    assert "guid" not in hit

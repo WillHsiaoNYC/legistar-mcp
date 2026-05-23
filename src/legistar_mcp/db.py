@@ -27,12 +27,13 @@ def _migrate(conn: sqlite3.Connection) -> None:
     CREATE TABLE IF NOT EXISTS is a no-op on existing tables, so columns added
     after a DB was first created need explicit ALTER TABLE. Each step probes
     via PRAGMA table_info and is idempotent. Safe to call on a brand-new DB:
-    skips if the table doesn't exist yet (init_db's executescript will create
-    it with the current schema).
+    when the table doesn't exist yet, init_db's executescript will create it
+    with the current schema and the migration step short-circuits.
     """
-    cols = {r["name"] for r in conn.execute("PRAGMA table_info(bills)")}
-    if not cols:
-        return
-    if "guid" not in cols:
-        conn.execute("ALTER TABLE bills ADD COLUMN guid TEXT")
-        conn.commit()
+    for table in ("bills", "events"):
+        cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if not cols:
+            continue
+        if "guid" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN guid TEXT")
+    conn.commit()

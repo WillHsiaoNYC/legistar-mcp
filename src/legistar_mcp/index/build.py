@@ -61,10 +61,10 @@ def index_event_file(conn: Connection, json_path: Path, archive_root: Path) -> N
     rel_path = json_path.resolve().relative_to(archive_root.resolve()).as_posix()
     conn.execute(
         """INSERT OR REPLACE INTO events
-           (id, body_id, body_name, date, location, last_modified, path)
-           VALUES (?,?,?,?,?,?,?)""",
+           (id, guid, body_id, body_name, date, location, last_modified, path)
+           VALUES (?,?,?,?,?,?,?,?)""",
         (
-            e["ID"], e.get("BodyID"), e.get("BodyName"),
+            e["ID"], e.get("GUID"), e.get("BodyID"), e.get("BodyName"),
             e.get("Date"), e.get("Location"),
             e.get("LastModified"), rel_path,
         ),

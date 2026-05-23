@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from sqlite3 import Connection
 from .build import index_bill_file, index_event_file, index_person_file
@@ -20,16 +21,44 @@ def _person_paths(root: Path):
         yield from sorted((root / "people").glob("*.json"))
 
 
-def build_all(conn: Connection, archive_root: Path) -> dict[str, int]:
+def _last_modified_of(path: Path) -> str | None:
+    with open(path, encoding="utf-8") as f:
+        return (json.load(f) or {}).get("LastModified")
+
+
+def build_all(
+    conn: Connection, archive_root: Path, incremental: bool = False
+) -> dict[str, int]:
+    seen_bills: dict[str, str | None] = {}
+    seen_events: dict[str, str | None] = {}
+    if incremental:
+        seen_bills = dict(conn.execute("SELECT path, last_modified FROM bills").fetchall())
+        seen_events = dict(conn.execute("SELECT path, last_modified FROM events").fetchall())
+
     stats = {"bills": 0, "events": 0, "people": 0}
+
     for p in _bill_paths(archive_root):
+        rel = str(p.resolve().relative_to(archive_root.resolve()))
+        if incremental:
+            lm = _last_modified_of(p)
+            if seen_bills.get(rel) == lm:
+                continue
         index_bill_file(conn, p, archive_root)
         stats["bills"] += 1
+
     for p in _event_paths(archive_root):
+        rel = str(p.resolve().relative_to(archive_root.resolve()))
+        if incremental:
+            lm = _last_modified_of(p)
+            if seen_events.get(rel) == lm:
+                continue
         index_event_file(conn, p, archive_root)
         stats["events"] += 1
+
+    # People are small; always re-index (per plan).
     for p in _person_paths(archive_root):
         index_person_file(conn, p, archive_root)
         stats["people"] += 1
+
     conn.commit()
     return stats

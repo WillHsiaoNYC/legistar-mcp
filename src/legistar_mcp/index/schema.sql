@@ -21,7 +21,7 @@ CREATE INDEX IF NOT EXISTS idx_bills_body ON bills(body_name);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS bills_fts USING fts5(
     name, title, summary, text,
-    content='', tokenize='porter unicode61'
+    content='', contentless_delete=1, tokenize='porter unicode61'
 );
 
 CREATE TABLE IF NOT EXISTS bills_fts_map (
@@ -62,7 +62,7 @@ CREATE INDEX IF NOT EXISTS idx_events_body ON events(body_name);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(
     item_title, agenda_note, minutes_note,
-    content='', tokenize='porter unicode61'
+    content='', contentless_delete=1, tokenize='porter unicode61'
 );
 
 CREATE TABLE IF NOT EXISTS events_fts_map (

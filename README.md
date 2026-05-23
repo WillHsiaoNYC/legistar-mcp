@@ -174,20 +174,22 @@ to*, etc. That's the differentiator over a plain title search — the agency
 name almost always lives in the bill's statutory text, not its title or
 summary.
 
-## Updating
+## Update the index
 
-The upstream archive updates near-daily. Pull and re-index:
+The upstream archive gets new bills, hearings, and votes on most weekdays. Two
+commands re-sync everything:
 
 ```sh
 cd ~/legistar/nyc_legislation && git pull
 cd ~/legistar && legistar-mcp index --archive ./nyc_legislation --db ./legistar.db
 ```
 
-`--incremental` (the default) skips files whose `LastModified` hasn't changed.
-Pass `--full` to rebuild from scratch — useful after a `legistar-mcp` upgrade
-or if you suspect index corruption.
+Output: `Indexed: bills=N events=N people=247` where `N` is how many files
+changed since your last index — a few seconds when nothing changed, ~30s on
+busy days, ~80s with `--full`. Default is `--incremental`; pass `--full` to
+rebuild from scratch.
 
-Restart your agent after re-indexing so it sees fresh data.
+Restart your AI agent to pick up the new data.
 
 ## Troubleshooting
 

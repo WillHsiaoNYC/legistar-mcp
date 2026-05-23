@@ -4,10 +4,13 @@ from sqlite3 import Connection
 from .build import index_bill_file, index_event_file, index_person_file
 
 
-# Real archive groups bills by Legistar type. All four are in-scope for v1
-# because agency mentions appear across resolutions and land-use bills,
-# not just introductions.
-_BILL_TYPE_DIRS = ("introduction", "land_use", "resolution", "resubmit")
+# Real archive groups bills by Legistar type. Three of these directories
+# contain actual bill records (introduction/, land_use/, resolution/);
+# resubmit/<year>.json was originally listed as a fourth type in the plan
+# but on inspection of the real archive each file there has shape
+# {"Resubmitted": [{"FromFile": ..., "ToFile": ...}]} (resubmission
+# mapping, not bill records), so it is excluded from the bill walk.
+_BILL_TYPE_DIRS = ("introduction", "land_use", "resolution")
 
 
 def _bill_paths(root: Path):

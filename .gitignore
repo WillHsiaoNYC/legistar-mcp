@@ -7,3 +7,4 @@ data/*.db
 data/*.db-journal
 *.egg-info/
 dist/
+.mcp.json

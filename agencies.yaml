@@ -1,0 +1,32 @@
+# legistar-mcp/agencies.yaml
+mayors-office-of-operations:
+  display: "Mayor's Office of Operations"
+  aliases:
+    - "Mayor's Office of Operations"
+    - "Mayor's office of operations"
+    - "Office of Operations"
+
+nycha:
+  display: "New York City Housing Authority"
+  aliases:
+    - "New York City Housing Authority"
+    - "NYCHA"
+    - "Housing Authority"
+
+dot:
+  display: "Department of Transportation"
+  aliases:
+    - "Department of Transportation"
+    - "DOT"
+
+dep:
+  display: "Department of Environmental Protection"
+  aliases:
+    - "Department of Environmental Protection"
+    - "DEP"
+
+dcas:
+  display: "Department of Citywide Administrative Services"
+  aliases:
+    - "Department of Citywide Administrative Services"
+    - "DCAS"

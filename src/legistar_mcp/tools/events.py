@@ -89,3 +89,11 @@ def search_events(
             r["mentions"] = mentions
 
     return rows
+
+
+def get_event(conn: Connection, archive_root: Path, id: int) -> dict | None:
+    row = conn.execute("SELECT path FROM events WHERE id = ?", (id,)).fetchone()
+    if not row:
+        return None
+    with open(Path(archive_root) / row["path"], encoding="utf-8") as f:
+        return json.load(f)

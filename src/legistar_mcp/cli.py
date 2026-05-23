@@ -55,7 +55,12 @@ def index(archive_root: Path, db_path: Path, incremental: bool) -> None:
     https://github.com/jehiah/nyc_legislation
     """
     conn = init_db(db_path)
-    stats = build_all(conn, archive_root=archive_root, incremental=incremental)
+    stats = build_all(
+        conn,
+        archive_root=archive_root,
+        incremental=incremental,
+        show_progress=True,
+    )
     click.echo(
         f"Indexed: bills={stats['bills']} events={stats['events']} people={stats['people']}"
     )

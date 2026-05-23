@@ -1,6 +1,11 @@
 import json
+import sys
+from contextlib import nullcontext
 from pathlib import Path
 from sqlite3 import Connection
+
+import click
+
 from .build import index_bill_file, index_event_file, index_person_file
 
 
@@ -39,7 +44,10 @@ def _last_modified_of(path: Path) -> str | None:
 
 
 def build_all(
-    conn: Connection, archive_root: Path, incremental: bool = False
+    conn: Connection,
+    archive_root: Path,
+    incremental: bool = False,
+    show_progress: bool = False,
 ) -> dict[str, int]:
     # Persist archive_root so query-time tools can resolve relative bills.path
     # back to the source JSON (needed for building snippets server-side, since
@@ -49,6 +57,11 @@ def build_all(
         (str(archive_root.resolve()),),
     )
 
+    # Materialize the path generators so the progress bars know totals upfront.
+    bills = list(_bill_paths(archive_root))
+    events = list(_event_paths(archive_root))
+    people = list(_person_paths(archive_root))
+
     seen_bills: dict[str, str | None] = {}
     seen_events: dict[str, str | None] = {}
     if incremental:
@@ -56,27 +69,36 @@ def build_all(
         seen_events = dict(conn.execute("SELECT path, last_modified FROM events").fetchall())
 
     stats = {"bills": 0, "events": 0, "people": 0}
+    archive_resolved = archive_root.resolve()
 
-    for p in _bill_paths(archive_root):
-        if incremental:
-            rel = p.resolve().relative_to(archive_root.resolve()).as_posix()
-            if seen_bills.get(rel) == _last_modified_of(p):
-                continue
-        index_bill_file(conn, p, archive_root)
-        stats["bills"] += 1
+    def _bar(items: list[Path], label: str):
+        if show_progress:
+            return click.progressbar(items, label=label, file=sys.stderr)
+        return nullcontext(items)
 
-    for p in _event_paths(archive_root):
-        if incremental:
-            rel = p.resolve().relative_to(archive_root.resolve()).as_posix()
-            if seen_events.get(rel) == _last_modified_of(p):
-                continue
-        index_event_file(conn, p, archive_root)
-        stats["events"] += 1
+    with _bar(bills, "Bills ") as it:
+        for p in it:
+            if incremental:
+                rel = p.resolve().relative_to(archive_resolved).as_posix()
+                if seen_bills.get(rel) == _last_modified_of(p):
+                    continue
+            index_bill_file(conn, p, archive_root)
+            stats["bills"] += 1
 
-    # People are small; always re-index (per plan).
-    for p in _person_paths(archive_root):
-        index_person_file(conn, p, archive_root)
-        stats["people"] += 1
+    with _bar(events, "Events") as it:
+        for p in it:
+            if incremental:
+                rel = p.resolve().relative_to(archive_resolved).as_posix()
+                if seen_events.get(rel) == _last_modified_of(p):
+                    continue
+            index_event_file(conn, p, archive_root)
+            stats["events"] += 1
+
+    # People are small; always re-index.
+    with _bar(people, "People") as it:
+        for p in it:
+            index_person_file(conn, p, archive_root)
+            stats["people"] += 1
 
     conn.commit()
     return stats

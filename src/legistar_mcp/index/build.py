@@ -44,7 +44,6 @@ def index_bill_file(conn: Connection, json_path: Path, archive_root: Path) -> No
          b.get("Summary") or "", b.get("Text") or ""),
     )
 
-    # Sponsors: replace whole set on reindex
     conn.execute("DELETE FROM sponsors WHERE bill_id = ?", (b["ID"],))
     for i, s in enumerate(b.get("Sponsors") or []):
         slug = s.get("Slug")
@@ -71,7 +70,6 @@ def index_event_file(conn: Connection, json_path: Path, archive_root: Path) -> N
         ),
     )
 
-    # Clear and reinsert per-item FTS rows
     old = conn.execute(
         "SELECT fts_rowid FROM events_fts_map WHERE event_id = ?", (e["ID"],)
     ).fetchall()

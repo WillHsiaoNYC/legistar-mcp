@@ -47,19 +47,17 @@ def build_all(
     stats = {"bills": 0, "events": 0, "people": 0}
 
     for p in _bill_paths(archive_root):
-        rel = p.resolve().relative_to(archive_root.resolve()).as_posix()
         if incremental:
-            lm = _last_modified_of(p)
-            if seen_bills.get(rel) == lm:
+            rel = p.resolve().relative_to(archive_root.resolve()).as_posix()
+            if seen_bills.get(rel) == _last_modified_of(p):
                 continue
         index_bill_file(conn, p, archive_root)
         stats["bills"] += 1
 
     for p in _event_paths(archive_root):
-        rel = p.resolve().relative_to(archive_root.resolve()).as_posix()
         if incremental:
-            lm = _last_modified_of(p)
-            if seen_events.get(rel) == lm:
+            rel = p.resolve().relative_to(archive_root.resolve()).as_posix()
+            if seen_events.get(rel) == _last_modified_of(p):
                 continue
         index_event_file(conn, p, archive_root)
         stats["events"] += 1

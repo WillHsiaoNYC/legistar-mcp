@@ -66,11 +66,11 @@ CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(
 );
 
 CREATE TABLE IF NOT EXISTS events_fts_map (
+    fts_rowid INTEGER PRIMARY KEY,
     event_id INTEGER NOT NULL REFERENCES events(id),
-    fts_rowid INTEGER NOT NULL UNIQUE,
-    item_sequence INTEGER,
-    PRIMARY KEY (event_id, item_sequence)
+    item_sequence INTEGER
 );
+CREATE INDEX IF NOT EXISTS idx_events_fts_map_event ON events_fts_map(event_id);
 
 CREATE TABLE IF NOT EXISTS index_state (
     key TEXT PRIMARY KEY,

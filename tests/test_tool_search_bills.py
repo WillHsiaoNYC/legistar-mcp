@@ -25,3 +25,23 @@ def test_search_filters_by_year(indexed_db):
 def test_search_limit_caps_results(indexed_db):
     results = search_bills(indexed_db, query=None, limit=1)
     assert len(results) == 1
+
+
+def test_agency_query_returns_snippets_with_role_context(indexed_db):
+    results = search_bills(
+        indexed_db,
+        agency="Mayor's Office of Operations",
+        year_from=2022,
+        limit=5,
+    )
+    assert any("0153-2022" in r["file"] for r in results)
+    hit = next(r for r in results if "0153-2022" in r["file"])
+    assert "mentions" in hit
+    assert len(hit["mentions"]) >= 1
+    # Snippet must contain MOO + enough context to characterize role
+    joined = " ".join(m["snippet"].lower() for m in hit["mentions"])
+    assert "office of operations" in joined
+    # Should mention SOME role-indicating word
+    assert any(
+        w in joined for w in ("consultation", "report", "submit", "established", "shall")
+    )

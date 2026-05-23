@@ -1,31 +1,21 @@
 # legistar-mcp
 
-An MCP server over the NYC Legistar legislation archive. Ask Claude civic-research
-questions in natural language and have it search across 19,656 bills, 16,776
-hearings, and 247 council members — including bills that mention specific city
-agencies, which is the canonical use case this server was built to solve.
+An MCP server that lets your desktop AI agent — Claude Desktop, Claude Code,
+Cursor, or any other MCP-compatible client — search NYC City Council
+legislation: 19,656 bills, 16,776 hearings, 247 council members. Built
+specifically for civic-research workflows where you need not just *whether* a
+bill mentions an agency, but the surrounding statutory sentence that
+characterizes that agency's role.
 
-## What it does
+## Data source — you supply it
 
-`legistar-mcp` indexes a local checkout of the NYC Council legislation
-JSON archive into a SQLite + FTS5 database and exposes 7 read-only MCP
-tools over stdio. Detail-fetch tools read the underlying JSON directly so
-they never drift from the source.
+**This package does not ship or fetch legislative data.** It indexes a local
+checkout of [`jehiah/nyc_legislation`](https://github.com/jehiah/nyc_legislation),
+an open JSON mirror of the NYC Council Legistar API maintained by
+[Jehiah Czebotar](https://github.com/jehiah). You provide that checkout when
+you run `legistar-mcp index`.
 
-The headline example: find every bill since 2022 that directs the Mayor's
-Office of Operations to do something, and surface the sentence that names them.
-See [Example](#example-find-bills-involving-the-mayors-office-of-operations).
-
-## Data source — required
-
-**This package does not ship or fetch legislative data itself.** It indexes a
-local checkout of a JSON mirror of the NYC Council Legistar website. You must
-supply that checkout when you run `legistar-mcp index`.
-
-The reference upstream is **[`jehiah/nyc_legislation`](https://github.com/jehiah/nyc_legislation)**,
-maintained by Jehiah Czebotar. It's generated from the official NYC Council
-Legislative API by [`jehiah/legislator`](https://github.com/jehiah/legislator)
-(a Go client) and contains:
+The archive shape (what the indexer walks):
 
 - `introduction/{year}/*.json` — introduced bills
 - `resolution/{year}/*.json` — resolutions
@@ -33,106 +23,69 @@ Legislative API by [`jehiah/legislator`](https://github.com/jehiah/legislator)
 - `events/{year}/*.json` — committee hearings + full Council meetings
 - `people/*.json` — council members
 
-To get a working copy:
+Clone size: ~2 GB with full history, or ~700 MB with `--depth 1`.
 
-```sh
-git clone https://github.com/jehiah/nyc_legislation.git
-```
+## Requirements
 
-(The repo is ~2 GB with full history. If you only need current data, add
-`--depth 1` for a shallow clone.)
-
-You can also point `legistar-mcp index` at any compatible fork — e.g., a
-pinned snapshot or your own mirror. The indexer walks the same directory
-shape regardless of which fork it's pointed at.
+- **Python 3.11+** and **[`uv`](https://docs.astral.sh/uv/)** — uv handles the
+  install. It's the only Python toolchain you need to know about.
+- **~3 GB free disk** for the archive (~2 GB) + the index (~105 MB).
+- **An MCP-compatible AI client** — Claude Desktop, Claude Code, Cursor,
+  Continue.dev, etc.
 
 ## Quickstart
 
-**The flow:** clone the upstream archive → install this package → **run `legistar-mcp index` once** to build a SQLite index from the archive → point Claude Desktop at the index. Without the index step the server has nothing to query and will refuse to start.
-
-### TL;DR — copy-paste version
-
-Three commands that get you from nothing to a built index. Run them in a directory where you're happy creating a `nyc_legislation/` subdirectory (the archive clone lives there):
+End-to-end setup in ~3 minutes. Copy-paste, no substitutions needed:
 
 ```sh
-# 1. Clone the upstream JSON archive (~2 GB, shallow is fine for current data)
+mkdir -p ~/legistar && cd ~/legistar
+
+# 1. Pull the upstream JSON archive (~700 MB shallow clone)
 git clone --depth 1 https://github.com/jehiah/nyc_legislation.git
 
 # 2. Install this server
 uv tool install git+https://github.com/WillHsiaoNYC/legistar-mcp
 
-# 3. Build the SQLite index (silent for ~80 seconds, then prints stats)
-mkdir -p ~/data
-legistar-mcp index --archive ./nyc_legislation --db ~/data/legistar.db
+# 3. Build the index (silent for ~80 seconds, then prints stats)
+legistar-mcp index --archive ./nyc_legislation --db ./legistar.db
 ```
 
-You should see `Indexed: bills=19656 events=16776 people=247` (numbers grow as the archive grows). Now go to [step 4 below](#4-configure-claude-desktop) to add `~/data/legistar.db` to your Claude Desktop config — that part is a manual JSON edit, not paste-able.
-
-> **Windows note:** the commands work as-is in Git Bash. In native PowerShell, swap `mkdir -p ~/data` for `New-Item -Force -ItemType Directory $HOME\data` and adjust paths to use `$HOME` / backslashes as needed.
-
-### 1. Prerequisites
-
-- Python 3.11+ and [`uv`](https://docs.astral.sh/uv/)
-- A local clone of the NYC Legistar JSON archive (see [Data source](#data-source--required) above)
-
-### 2. Install
-
-Direct install from GitHub (no clone needed):
-
-```sh
-uv tool install git+https://github.com/WillHsiaoNYC/legistar-mcp
-```
-
-Or install from a local clone (useful if you want to read/modify the source):
-
-```sh
-git clone https://github.com/WillHsiaoNYC/legistar-mcp
-cd legistar-mcp
-uv tool install .
-```
-
-Either way, `legistar-mcp` ends up on your `PATH`. Verify with:
-
-```sh
-legistar-mcp --help
-```
-
-(Not yet on PyPI — that'll come once the API surface stabilizes.)
-
-### 3. Build the index (required before first use)
-
-> ⚠️ **This step is mandatory.** `legistar-mcp serve` reads from a SQLite
-> index that this command creates. If you skip ahead to Claude Desktop config
-> without running `index` first, the server will fail to start with
-> `LEGISTAR_DB_PATH does not exist` or `DB does not record an archive_root`.
-
-Point `--archive` at your archive clone and `--db` at where you want the
-SQLite file written. For example, if both `nyc_legislation` and a fresh
-`data/` directory live in your home:
-
-```sh
-legistar-mcp index \
-  --archive ~/nyc_legislation \
-  --db ~/data/legistar.db
-```
-
-This walks ~37k JSON files and writes ~105 MB to disk. **There's no progress
-bar** — it'll be silent for about 80 seconds, then print:
+You should see:
 
 ```
 Indexed: bills=19656 events=16776 people=247
 ```
 
-If you don't see those numbers within a minute or two on a normal dev machine,
-something is wrong — `Ctrl-C` and double-check `--archive` points at a real
-clone of the JSON archive.
+Final folder layout:
 
-`--archive` falls back to `$LEGISTAR_ARCHIVE_PATH` and `--db` falls back to
-`$LEGISTAR_DB_PATH` if you'd rather set those in your shell environment.
+```
+~/legistar/
+├── nyc_legislation/   ← archive — DO NOT delete; query-time tools read JSON from here
+└── legistar.db        ← SQLite index (~105 MB)
+```
 
-### 4. Configure Claude Desktop
+Now [configure your AI agent](#configure-your-ai-agent) below.
 
-Add the following to your Claude Desktop config (`claude_desktop_config.json`):
+> **Windows note:** the commands work as-is in Git Bash / WSL. In native
+> PowerShell, replace `mkdir -p ~/legistar && cd ~/legistar` with
+> `New-Item -Force -ItemType Directory $HOME\legistar; cd $HOME\legistar`.
+> Everything else is identical.
+
+## Configure your AI agent
+
+The server speaks MCP over stdio. Your agent launches it as a subprocess —
+you never start it manually. Add an entry to your agent's MCP config and
+restart the agent.
+
+**Replace `/Users/you/legistar/legistar.db` below with the absolute path to
+your DB file.** On Linux: `/home/you/legistar/legistar.db`. On Windows:
+`C:\\Users\\you\\legistar\\legistar.db`.
+
+### Claude Desktop
+
+Edit `claude_desktop_config.json`:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
 ```json
 {
@@ -141,43 +94,73 @@ Add the following to your Claude Desktop config (`claude_desktop_config.json`):
       "command": "legistar-mcp",
       "args": ["serve"],
       "env": {
-        "LEGISTAR_DB_PATH": "/path/to/legistar.db"
+        "LEGISTAR_DB_PATH": "/Users/you/legistar/legistar.db"
       }
     }
   }
 }
 ```
 
-Note: `serve` only needs `LEGISTAR_DB_PATH`. The archive root is read from the
-DB itself (it was recorded there at index time), so you don't have to keep two
-paths in sync.
+### Claude Code
 
-Restart Claude Desktop and ask a civic-research question to confirm the tools
-are visible.
+User-wide: `~/.claude.json`. Project-scoped: `<project>/.mcp.json`. Same
+config shape as Claude Desktop. Restart `claude` after editing.
+
+### Cursor / Continue.dev / other MCP clients
+
+Most MCP clients accept the same config shape:
+
+```json
+{
+  "mcpServers": {
+    "legistar": {
+      "command": "legistar-mcp",
+      "args": ["serve"],
+      "env": { "LEGISTAR_DB_PATH": "/Users/you/legistar/legistar.db" }
+    }
+  }
+}
+```
+
+Cursor reads `~/.cursor/mcp.json`. For others, check the client's docs for
+the config location.
+
+## Verify it works
+
+After restarting your agent, ask:
+
+> Use the legistar MCP to list NYC Council committees with bill and event counts.
+
+Within a few seconds you should get a tabular reply with committees like
+"Committee on General Welfare", "Committee on Transportation", etc., each
+with bill and event counts. That confirms the server is wired and the index
+is populated.
+
+If the tools don't appear at all, jump to [Troubleshooting](#troubleshooting).
 
 ## Tools
 
-| Tool | What it does |
-|------|--------------|
-| `search_bills` | FTS over Name/Title/Summary/Text plus filters: `query`, `agency`, `year_from`, `year_to`, `status`, `type`, `committee`, `sponsor_slug`. Returns role-context snippets when `agency` is used. |
-| `get_bill` | Fetch a single bill's full record by `file` (e.g. `Int 0153-2022`) or numeric `id`. |
-| `search_people` | Find council members by `name`, optionally filtered to currently active members. |
-| `get_person` | Full profile by `slug`, including sponsored-bill counts. |
-| `search_events` | Hearings/events by `query`, `agency`, `committee`, and `date_from`/`date_to`. |
-| `get_event` | Single event by numeric `id`, including agenda items and minutes notes. |
-| `list_committees` | All committees with bill and event counts. |
+| Tool | Returns |
+|------|---------|
+| `search_bills` | Bills matching FTS query + filters (`query`, `agency`, `year_from`, `year_to`, `status`, `type`, `committee`, `sponsor_slug`). Includes role-context `mentions` snippets when `agency` is used. |
+| `get_bill` | Full bill record from raw JSON. Lookup by `file` (e.g. `Int 0153-2022`) or numeric `id`. |
+| `search_people` | Council members by `name` substring; optional `active_only` filter. |
+| `get_person` | Profile by `slug` (e.g. `adrienne-e-adams`) plus sponsored-bill counts grouped by status. |
+| `search_events` | Hearings/events by `query`, `agency`, `committee`, `date_from`, `date_to`. Includes per-item `mentions` snippets when `agency` is used. |
+| `get_event` | Full event record by numeric `id` — agenda items, minutes notes, votes. |
+| `list_committees` | All committees with bill + event counts. Useful for orienting. |
 
-## Example: find bills involving the Mayor's Office of Operations
+## Example: bills involving the Mayor's Office of Operations
 
-Ask Claude:
+Ask your agent:
 
-> Find NYC Council bills since 2022 that direct the Mayor's Office of Operations
-> to do something, and quote the sentence that mentions them.
+> Find NYC Council bills since 2022 that direct the Mayor's Office of
+> Operations to do something, and quote the sentence that names them.
 
-Claude will call `search_bills` with `agency="Mayor's Office of Operations"` and
-`year_from=2022`. The agency resolver expands that to an FTS query against the
-aliases in `agencies.yaml`, and the server attaches a role-context snippet for
-each hit. A real result for `Int 0153-2022` looks like:
+The agent calls `search_bills` with `agency="Mayor's Office of Operations"`
+and `year_from=2022`. The server resolves the agency name against
+`agencies.yaml` aliases, runs FTS5, and attaches a role-context snippet from
+each hit's source JSON. A real result for `Int 0153-2022`:
 
 ```
 ...the commissioner of citywide administrative services, in consultation
@@ -185,74 +168,97 @@ with the <mark>mayor's office of operations</mark>, shall submit
 an annual report...
 ```
 
-That snippet is what makes this server useful: the agency name is buried in
-bill `Text`, not the title or summary, so a naive title search would miss it
-entirely.
+Without the snippet, you'd only know MOO is *mentioned* in the bill. With it,
+the agent can characterize MOO's role: *consulted*, *directed*, *reporting
+to*, etc. That's the differentiator over a plain title search — the agency
+name almost always lives in the bill's statutory text, not its title or
+summary.
 
 ## Updating
 
-When the upstream archive changes, pull and re-index. `--incremental` (the
-default) skips bills whose `LastModified` hasn't changed:
+The upstream archive updates near-daily. Pull and re-index:
 
 ```sh
-cd /path/to/nyc_legislation && git pull upstream master
-legistar-mcp index \
-  --archive /path/to/nyc_legislation \
-  --db /path/to/legistar.db
+cd ~/legistar/nyc_legislation && git pull
+cd ~/legistar && legistar-mcp index --archive ./nyc_legislation --db ./legistar.db
 ```
 
-Pass `--full` to force a from-scratch rebuild.
+`--incremental` (the default) skips files whose `LastModified` hasn't changed.
+Pass `--full` to rebuild from scratch — useful after a `legistar-mcp` upgrade
+or if you suspect index corruption.
+
+Restart your agent after re-indexing so it sees fresh data.
 
 ## Troubleshooting
 
-**`LEGISTAR_DB_PATH is not set` at startup.** You launched `serve` without the
-env var. Set it in your Claude Desktop config under `env` or your shell.
+**Tools don't appear in my agent at all.** Check the config file path matches
+your client's expected location, and that you restarted the client after
+editing. To test the server independently of your agent, run
+`legistar-mcp serve` from a terminal with `LEGISTAR_DB_PATH` set — if it
+errors, that's the same error your agent saw. You can also drive it
+interactively via the MCP Inspector:
+`npx @modelcontextprotocol/inspector legistar-mcp serve`.
+
+**`LEGISTAR_DB_PATH is not set` at startup.** Your client config's `env`
+block doesn't include `LEGISTAR_DB_PATH`. Add it and restart.
 
 **`LEGISTAR_DB_PATH does not exist` at startup.** The env var is set but
-points at a path with no DB file. You probably skipped step 3 of the
-Quickstart — go back and run `legistar-mcp index` first.
+points to nothing. You skipped the index step — run `legistar-mcp index`
+first.
 
-**`DB does not record an archive_root`.** The DB file exists but is empty
-(only the schema, no indexed data). Same fix as above: run `legistar-mcp index`
-to populate it.
+**`DB does not record an archive_root`.** The DB file exists but contains
+no indexed data (only the schema). Run `legistar-mcp index` against your
+archive clone.
 
 **`archive_root recorded in DB does not exist or is not a directory`.** You
-moved or renamed the archive after indexing. Re-run `legistar-mcp index` to
-update the recorded path.
+moved or deleted the archive clone after indexing. Re-run
+`legistar-mcp index --archive <new-path>` to update the recorded location.
 
-**`search_bills(agency=...)` returns bills but `mentions` is empty.** FTS uses
-the porter stemmer, so an FTS hit doesn't guarantee a literal phrase match.
-The Python-side snippet builder needs a literal substring to highlight. The
-bill is still a real match — just without an inline quote.
+**Agency search returns bills but `mentions` is empty for some rows.** FTS5
+uses porter stemming — an FTS hit doesn't guarantee a literal phrase match.
+The snippet builder needs the literal phrase to highlight. The bill is still
+a real match, just without an inline quote. Use `get_bill` to read its full
+text.
 
 ## Known limitations
 
-- Agency snippets are built in Python by re-reading source JSON. Because FTS
-  uses porter stemming, some FTS hits won't yield a literal-phrase snippet and
-  `mentions` will be empty for those rows.
-- `--incremental` still reads every JSON file to compare `LastModified`. It's
-  faster than a full rebuild but the I/O dominates, so the wallclock difference
-  is modest.
-- The DB's recorded `archive_root` is whatever path you passed to `index` last.
-  If you move the archive without re-indexing, `get_bill`/`get_event` detail
-  fetches will fail until you re-run `index`.
-- Read-only. There are no write or admin tools. Bill JSON in your fork is the
-  source of truth.
+- **Agency snippets are built in Python**, not via SQLite's native `snippet()`.
+  Contentless FTS5 tables (which we use to keep the DB small) return NULL
+  from `snippet()`, so the server reads source JSON at query time and renders
+  snippets itself. Tradeoff: ~105 MB DB instead of ~300 MB, at the cost of
+  per-result JSON reads and occasional empty `mentions` when porter stemming
+  matched a non-literal form.
+- **`--incremental` still touches every JSON** to read `LastModified`. It's
+  faster than `--full` but the I/O dominates, so the wallclock difference is
+  moderate, not dramatic.
+- **The archive can't be moved without re-indexing.** The DB stores the
+  absolute path to the archive at index time. Move the archive → re-run
+  `index`.
+- **Read-only.** There are no admin or write tools. Source JSON in your
+  archive clone is the source of truth.
+
+## Uninstall
+
+```sh
+uv tool uninstall legistar-mcp
+rm -rf ~/legistar/
+```
+
+Then remove the `legistar` entry from your AI agent's MCP config.
 
 ## Credits
 
-- The underlying JSON archive — the actual data this server indexes — is
-  maintained by **[Jehiah Czebotar](https://github.com/jehiah)** at
+- The JSON archive — the actual data this server indexes — is maintained by
+  **[Jehiah Czebotar](https://github.com/jehiah)** at
   [`jehiah/nyc_legislation`](https://github.com/jehiah/nyc_legislation),
-  generated by his Go client [`jehiah/legislator`](https://github.com/jehiah/legislator)
-  against the official NYC Council Legistar API. None of this works without that
-  upstream — please consider [starring or contributing to it](https://github.com/jehiah/nyc_legislation).
+  generated by his Go client
+  [`jehiah/legislator`](https://github.com/jehiah/legislator) against the
+  official NYC Council Legistar API. None of this works without that upstream
+  — please [star or contribute to it](https://github.com/jehiah/nyc_legislation).
 - Source data is public-record NYC Council legislation, retrieved via the
-  Granicus-operated [Legistar API](https://webapi.legistar.com/Help) that NYC
-  Council publishes.
+  Granicus-operated [Legistar API](https://webapi.legistar.com/Help).
 - `legistar-mcp` is unaffiliated with NYC Council, Granicus, or the upstream
-  archive maintainer. It's a third-party tool that depends on the upstream
-  archive being available.
+  archive maintainer.
 
 ## License
 

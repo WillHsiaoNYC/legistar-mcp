@@ -1,7 +1,9 @@
 from pathlib import Path
 from legistar_mcp.agency import load_agencies, resolve_to_fts_query
 
-YAML_PATH = Path(__file__).parent.parent / "agencies.yaml"
+# agencies.yaml ships inside the package so `uv tool install` carries it
+# along. Tests still read it via a Path for the load_agencies surface.
+YAML_PATH = Path(__file__).parent.parent / "src" / "legistar_mcp" / "agencies.yaml"
 
 
 def test_load_returns_canonical_dict():

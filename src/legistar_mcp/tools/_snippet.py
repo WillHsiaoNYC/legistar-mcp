@@ -1,18 +1,25 @@
 import html
 import re
+from importlib.resources import files
 from pathlib import Path
 from sqlite3 import Connection
 
-from ..agency import load_agencies
+import yaml
 
-_AGENCIES_PATH = Path(__file__).parent.parent.parent.parent / "agencies.yaml"
 _agencies_cache: dict | None = None
 
 
 def _get_agencies() -> dict:
+    """Load and cache agencies.yaml from package data.
+
+    Uses importlib.resources so this works after `uv tool install` (where
+    the package lives under site-packages and a __file__-walk wouldn't find
+    a sibling YAML).
+    """
     global _agencies_cache
     if _agencies_cache is None:
-        _agencies_cache = load_agencies(_AGENCIES_PATH)
+        text = files("legistar_mcp").joinpath("agencies.yaml").read_text(encoding="utf-8")
+        _agencies_cache = yaml.safe_load(text) or {}
     return _agencies_cache
 
 

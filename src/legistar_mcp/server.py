@@ -1,9 +1,10 @@
 """MCP stdio server wiring the 7 Legistar tools.
 
-Reads `LEGISTAR_DB_PATH` and `LEGISTAR_ARCHIVE_PATH` from the environment at
-startup and fails fast if either is missing or does not exist on disk. The
-server opens an existing SQLite index (built via `legistar-mcp index`) — it
-will not create or migrate the schema.
+Reads `LEGISTAR_DB_PATH` from the environment at startup and fails fast if it
+is missing or doesn't exist. The archive root is read from the indexed DB
+itself (`index_state.archive_root`, written by `legistar-mcp index`) so the
+search-tools and the detail-tools can't drift apart if a user re-points an
+env var between indexing and serving.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from .db import open_db
+from .tools._snippet import _archive_root
 from .tools.bills import get_bill as _get_bill
 from .tools.bills import search_bills as _search_bills
 from .tools.committees import list_committees as _list_committees
@@ -23,44 +25,41 @@ from .tools.people import get_person as _get_person
 from .tools.people import search_people as _search_people
 
 
-def _load_env() -> tuple[Path, Path]:
-    """Return (db_path, archive_root) from env, failing fast if invalid."""
+def _load_env_db_path() -> Path:
+    """Return db_path from LEGISTAR_DB_PATH, failing fast if invalid."""
     db_path_str = os.environ.get("LEGISTAR_DB_PATH")
-    archive_str = os.environ.get("LEGISTAR_ARCHIVE_PATH")
-
     if not db_path_str:
         raise RuntimeError(
             "LEGISTAR_DB_PATH is not set. Run `legistar-mcp index` first and "
             "point LEGISTAR_DB_PATH at the resulting SQLite file."
         )
-    if not archive_str:
-        raise RuntimeError(
-            "LEGISTAR_ARCHIVE_PATH is not set. Set it to the root of the NYC "
-            "Legistar archive checkout (the directory containing bills/, "
-            "events/, people/)."
-        )
-
     db_path = Path(db_path_str)
-    archive_root = Path(archive_str)
-
     if not db_path.exists():
         raise RuntimeError(f"LEGISTAR_DB_PATH does not exist: {db_path}")
-    if not archive_root.exists() or not archive_root.is_dir():
-        raise RuntimeError(
-            f"LEGISTAR_ARCHIVE_PATH does not exist or is not a directory: {archive_root}"
-        )
-
-    return db_path, archive_root
+    return db_path
 
 
 def make_server() -> FastMCP:
     """Construct a FastMCP server with all 7 Legistar tools registered.
 
-    Reads env vars and opens the DB eagerly so misconfiguration surfaces at
+    Resolves the DB and archive_root eagerly so misconfiguration surfaces at
     startup, not on the first tool call.
     """
-    db_path, archive_root = _load_env()
+    db_path = _load_env_db_path()
     conn = open_db(db_path)
+
+    archive_root = _archive_root(conn)
+    if archive_root is None:
+        raise RuntimeError(
+            "DB does not record an archive_root. Re-run `legistar-mcp index` "
+            "to populate it."
+        )
+    if not archive_root.exists() or not archive_root.is_dir():
+        raise RuntimeError(
+            f"archive_root recorded in DB does not exist or is not a directory: "
+            f"{archive_root}. Re-run `legistar-mcp index --archive <path>` if "
+            "you moved the archive."
+        )
 
     server = FastMCP("legistar-mcp")
 

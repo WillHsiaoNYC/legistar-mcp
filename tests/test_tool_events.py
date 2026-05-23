@@ -22,3 +22,11 @@ def test_search_events_returns_rows(indexed_db):
 def test_search_events_filters_by_date_range(indexed_db):
     results = search_events(indexed_db, date_from="2024-01-01", limit=5)
     assert all(r["date"] >= "2024-01-01" for r in results)
+
+
+def test_search_events_date_filter_rejects_out_of_range(indexed_db):
+    # The fixture event is from 2024; a 2099 floor must exclude it.
+    # This exercises the rejection path the previous test couldn't (only
+    # one fixture row meant the >= constraint passed trivially).
+    results = search_events(indexed_db, date_from="2099-01-01", limit=5)
+    assert results == []

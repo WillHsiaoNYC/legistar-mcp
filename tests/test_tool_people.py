@@ -25,4 +25,10 @@ def test_get_person_returns_raw_json(indexed_db):
     person = get_person(conn, archive_root=root, slug=slug)
     assert person["Slug"] == slug
     assert "_stats" in person
-    assert "sponsored_bill_count_by_status" in person["_stats"]
+    stats = person["_stats"]["sponsored_bill_count_by_status"]
+    assert isinstance(stats, dict)
+    # Adrienne E. Adams (the fixture person) is a known sponsor of int_0153_2022.
+    # If we ever swap the person fixture, this assertion needs revisiting.
+    assert sum(stats.values()) >= 1
+    # NULL status_name must not leak as the string "null".
+    assert "null" not in stats

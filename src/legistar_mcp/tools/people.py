@@ -30,12 +30,14 @@ def get_person(conn: Connection, archive_root: Path, slug: str) -> dict | None:
         return None
     with open(Path(archive_root) / row["path"], encoding="utf-8") as f:
         person = json.load(f)
+    # COALESCE so a NULL status_name doesn't serialize as the string "null"
+    # (JSON dict keys must be strings; None becomes "null" via json.dumps).
     stats = dict(
         conn.execute(
-            "SELECT b.status_name, COUNT(*) AS n "
+            "SELECT COALESCE(b.status_name, '(unknown)') AS status, COUNT(*) AS n "
             "FROM sponsors s JOIN bills b ON s.bill_id = b.id "
             "WHERE s.person_slug = ? "
-            "GROUP BY b.status_name",
+            "GROUP BY COALESCE(b.status_name, '(unknown)')",
             (slug,),
         ).fetchall()
     )

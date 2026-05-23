@@ -1,0 +1,27 @@
+import pytest
+
+from legistar_mcp.db import init_db
+from legistar_mcp.index.bulk import build_all
+from legistar_mcp.tools.bills import search_bills
+
+
+@pytest.fixture
+def indexed_db(tmp_path, fixtures_root):
+    conn = init_db(tmp_path / "t.db")
+    build_all(conn, archive_root=fixtures_root)
+    return conn
+
+
+def test_search_by_keyword(indexed_db):
+    results = search_bills(indexed_db, query="domestic violence", limit=5)
+    assert any("0153-2022" in r["file"] for r in results)
+
+
+def test_search_filters_by_year(indexed_db):
+    results = search_bills(indexed_db, query=None, year_from=2024, limit=5)
+    assert all(r["intro_date"] >= "2024" for r in results)
+
+
+def test_search_limit_caps_results(indexed_db):
+    results = search_bills(indexed_db, query=None, limit=1)
+    assert len(results) == 1

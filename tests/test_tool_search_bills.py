@@ -27,6 +27,17 @@ def test_search_limit_caps_results(indexed_db):
     assert len(results) == 1
 
 
+def test_search_results_include_legistar_url(indexed_db):
+    results = search_bills(indexed_db, query="domestic violence", limit=5)
+    hit = next(r for r in results if "0153-2022" in r["file"])
+    assert hit["legistar_url"] == (
+        "https://legistar.council.nyc.gov/LegislationDetail.aspx"
+        f"?ID={hit['id']}&GUID=13DF2614-9622-473B-BDEE-4775812DEEAF"
+    )
+    # The transient guid column from the SELECT must not leak into output.
+    assert "guid" not in hit
+
+
 def test_agency_query_returns_snippets_with_role_context(indexed_db):
     results = search_bills(
         indexed_db,

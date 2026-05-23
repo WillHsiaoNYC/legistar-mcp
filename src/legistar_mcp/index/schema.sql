@@ -2,6 +2,7 @@
 
 CREATE TABLE IF NOT EXISTS bills (
     id INTEGER PRIMARY KEY,           -- Legistar ID
+    guid TEXT,                        -- Legistar item GUID (needed to build LegislationDetail URL)
     file TEXT UNIQUE NOT NULL,        -- e.g., "Int 0153-2022"
     name TEXT,
     title TEXT,

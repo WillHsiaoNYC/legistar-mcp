@@ -11,11 +11,11 @@ def index_bill_file(conn: Connection, json_path: Path, archive_root: Path) -> No
 
     conn.execute(
         """INSERT OR REPLACE INTO bills
-           (id, file, name, title, summary, type_name, status_name,
+           (id, guid, file, name, title, summary, type_name, status_name,
             body_id, body_name, intro_date, enactment_date, last_modified, path)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
-            b["ID"], b["File"], b.get("Name"), b.get("Title"), b.get("Summary"),
+            b["ID"], b.get("GUID"), b["File"], b.get("Name"), b.get("Title"), b.get("Summary"),
             b.get("TypeName"), b.get("StatusName"),
             b.get("BodyID"), b.get("BodyName"),
             b.get("IntroDate"), b.get("EnactmentDate"),

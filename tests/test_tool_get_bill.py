@@ -23,3 +23,12 @@ def test_get_bill_by_file(indexed_db):
 def test_get_bill_missing_returns_none(indexed_db):
     conn, root = indexed_db
     assert get_bill(conn, archive_root=root, file="Does Not Exist") is None
+
+
+def test_get_bill_includes_legistar_url(indexed_db):
+    conn, root = indexed_db
+    bill = get_bill(conn, archive_root=root, file="Int 0153-2022")
+    assert bill["LegistarURL"] == (
+        "https://legistar.council.nyc.gov/LegislationDetail.aspx"
+        f"?ID={bill['ID']}&GUID={bill['GUID']}"
+    )

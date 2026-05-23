@@ -14,6 +14,13 @@ _SNIPPET_FIELDS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _legistar_url(bill_id: int | None, guid: str | None) -> str | None:
+    """Build the public Legistar LegislationDetail URL, or None if missing parts."""
+    if not bill_id or not guid:
+        return None
+    return f"https://legistar.council.nyc.gov/LegislationDetail.aspx?ID={bill_id}&GUID={guid}"
+
+
 def search_bills(
     conn: Connection,
     query: str | None = None,
@@ -61,7 +68,7 @@ def search_bills(
         params.append(sponsor_slug)
 
     sql = (
-        "SELECT DISTINCT bills.id, bills.file, bills.title, bills.summary, "
+        "SELECT DISTINCT bills.id, bills.guid, bills.file, bills.title, bills.summary, "
         "bills.status_name, bills.type_name, bills.body_name, bills.intro_date "
         "FROM bills" + join
     )
@@ -71,6 +78,8 @@ def search_bills(
     params.append(limit)
 
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    for r in rows:
+        r["legistar_url"] = _legistar_url(r.get("id"), r.pop("guid", None))
 
     if agency and rows:
         phrases = _extract_phrases(query) if query else []
@@ -119,4 +128,6 @@ def get_bill(
     if not row:
         return None
     with open(Path(archive_root) / row["path"], encoding="utf-8") as f:
-        return json.load(f)
+        bill = json.load(f)
+    bill["LegistarURL"] = _legistar_url(bill.get("ID"), bill.get("GUID"))
+    return bill

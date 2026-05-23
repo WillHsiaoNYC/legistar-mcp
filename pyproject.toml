@@ -28,3 +28,7 @@ target-version = "py311"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not slow'"
+markers = [
+    "slow: tests that run against the real NYC Legistar archive (use -m slow)",
+]

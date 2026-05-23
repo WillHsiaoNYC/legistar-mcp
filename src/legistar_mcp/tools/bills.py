@@ -1,3 +1,4 @@
+import html
 import json
 import re
 from pathlib import Path
@@ -48,9 +49,11 @@ def _build_snippet(
             end = min(len(text), idx + len(phrase) + window)
             prefix = "..." if start > 0 else ""
             suffix = "..." if end < len(text) else ""
-            head = text[start:idx]
-            match = text[idx : idx + len(phrase)]
-            tail = text[idx + len(phrase) : end]
+            # Escape segments before wrapping so bill text containing `<`/`>`
+            # doesn't corrupt rendering in HTML/Markdown-aware MCP clients.
+            head = html.escape(text[start:idx])
+            match = html.escape(text[idx : idx + len(phrase)])
+            tail = html.escape(text[idx + len(phrase) : end])
             return f"{prefix}{head}<mark>{match}</mark>{tail}{suffix}"
     return None
 
@@ -127,13 +130,19 @@ def search_bills(
             mentions: list[dict] = []
             rel = path_rows.get(r["id"])
             if root and rel and phrases:
-                with open(root / rel, encoding="utf-8") as f:
-                    data = json.load(f) or {}
-                for field_label, key in _SNIPPET_FIELDS:
-                    value = data.get(key) or ""
-                    snip = _build_snippet(value, phrases)
-                    if snip:
-                        mentions.append({"field": field_label, "snippet": snip})
+                # If the archive moved or a file was deleted since indexing,
+                # degrade to empty mentions rather than 500'ing the whole search.
+                try:
+                    with open(root / rel, encoding="utf-8") as f:
+                        data = json.load(f) or {}
+                except (FileNotFoundError, OSError):
+                    data = None
+                if data is not None:
+                    for field_label, key in _SNIPPET_FIELDS:
+                        value = data.get(key) or ""
+                        snip = _build_snippet(value, phrases)
+                        if snip:
+                            mentions.append({"field": field_label, "snippet": snip})
             r["mentions"] = mentions
 
     return rows

@@ -48,6 +48,8 @@ shape regardless of which fork it's pointed at.
 
 ## Quickstart
 
+**The flow:** clone the upstream archive → install this package → **run `legistar-mcp index` once** to build a SQLite index from the archive → point Claude Desktop at the index. Without the index step the server has nothing to query and will refuse to start.
+
 ### 1. Prerequisites
 
 - Python 3.11+ and [`uv`](https://docs.astral.sh/uv/)
@@ -77,7 +79,12 @@ legistar-mcp --help
 
 (Not yet on PyPI — that'll come once the API surface stabilizes.)
 
-### 3. Build the index (one-time)
+### 3. Build the index (required before first use)
+
+> ⚠️ **This step is mandatory.** `legistar-mcp serve` reads from a SQLite
+> index that this command creates. If you skip ahead to Claude Desktop config
+> without running `index` first, the server will fail to start with
+> `LEGISTAR_DB_PATH does not exist` or `DB does not record an archive_root`.
 
 Point `--archive` at your archive clone and `--db` at where you want the
 SQLite file written. For example, if both `nyc_legislation` and a fresh
@@ -180,6 +187,14 @@ Pass `--full` to force a from-scratch rebuild.
 
 **`LEGISTAR_DB_PATH is not set` at startup.** You launched `serve` without the
 env var. Set it in your Claude Desktop config under `env` or your shell.
+
+**`LEGISTAR_DB_PATH does not exist` at startup.** The env var is set but
+points at a path with no DB file. You probably skipped step 3 of the
+Quickstart — go back and run `legistar-mcp index` first.
+
+**`DB does not record an archive_root`.** The DB file exists but is empty
+(only the schema, no indexed data). Same fix as above: run `legistar-mcp index`
+to populate it.
 
 **`archive_root recorded in DB does not exist or is not a directory`.** You
 moved or renamed the archive after indexing. Re-run `legistar-mcp index` to

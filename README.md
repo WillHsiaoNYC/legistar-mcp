@@ -50,6 +50,26 @@ shape regardless of which fork it's pointed at.
 
 **The flow:** clone the upstream archive → install this package → **run `legistar-mcp index` once** to build a SQLite index from the archive → point Claude Desktop at the index. Without the index step the server has nothing to query and will refuse to start.
 
+### TL;DR — copy-paste version
+
+Three commands that get you from nothing to a built index. Run them in a directory where you're happy creating a `nyc_legislation/` subdirectory (the archive clone lives there):
+
+```sh
+# 1. Clone the upstream JSON archive (~2 GB, shallow is fine for current data)
+git clone --depth 1 https://github.com/jehiah/nyc_legislation.git
+
+# 2. Install this server
+uv tool install git+https://github.com/WillHsiaoNYC/legistar-mcp
+
+# 3. Build the SQLite index (silent for ~80 seconds, then prints stats)
+mkdir -p ~/data
+legistar-mcp index --archive ./nyc_legislation --db ~/data/legistar.db
+```
+
+You should see `Indexed: bills=19656 events=16776 people=247` (numbers grow as the archive grows). Now go to [step 4 below](#4-configure-claude-desktop) to add `~/data/legistar.db` to your Claude Desktop config — that part is a manual JSON edit, not paste-able.
+
+> **Windows note:** the commands work as-is in Git Bash. In native PowerShell, swap `mkdir -p ~/data` for `New-Item -Force -ItemType Directory $HOME\data` and adjust paths to use `$HOME` / backslashes as needed.
+
 ### 1. Prerequisites
 
 - Python 3.11+ and [`uv`](https://docs.astral.sh/uv/)

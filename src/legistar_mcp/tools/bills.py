@@ -137,3 +137,21 @@ def search_bills(
             r["mentions"] = mentions
 
     return rows
+
+
+def get_bill(
+    conn: Connection,
+    archive_root: Path,
+    file: str | None = None,
+    id: int | None = None,
+) -> dict | None:
+    if file:
+        row = conn.execute("SELECT path FROM bills WHERE file = ?", (file,)).fetchone()
+    elif id is not None:
+        row = conn.execute("SELECT path FROM bills WHERE id = ?", (id,)).fetchone()
+    else:
+        raise ValueError("Must supply either `file` or `id`")
+    if not row:
+        return None
+    with open(Path(archive_root) / row["path"], encoding="utf-8") as f:
+        return json.load(f)

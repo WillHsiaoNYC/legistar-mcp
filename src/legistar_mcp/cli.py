@@ -29,16 +29,31 @@ def main() -> None:
     required=True,
     envvar="LEGISTAR_ARCHIVE_PATH",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help=(
+        "Path to a local checkout of the NYC Legistar JSON archive "
+        "(reference upstream: https://github.com/jehiah/nyc_legislation). "
+        "This server does NOT bundle or fetch data; you must supply the archive. "
+        "Falls back to $LEGISTAR_ARCHIVE_PATH if set."
+    ),
 )
 @click.option(
     "--db",
     "db_path",
     default=lambda: os.environ.get("LEGISTAR_DB_PATH", "data/legistar.db"),
     type=click.Path(path_type=Path),
+    help="Where to write the SQLite index. Defaults to $LEGISTAR_DB_PATH or data/legistar.db.",
 )
-@click.option("--incremental/--full", default=True)
+@click.option(
+    "--incremental/--full",
+    default=True,
+    help="Incremental skips files whose LastModified is unchanged; --full rebuilds everything.",
+)
 def index(archive_root: Path, db_path: Path, incremental: bool) -> None:
-    """Build (or refresh) the SQLite index from the NYC Legistar archive."""
+    """Build (or refresh) the SQLite index from the NYC Legistar archive.
+
+    Requires a local checkout of the archive. See:
+    https://github.com/jehiah/nyc_legislation
+    """
     conn = init_db(db_path)
     stats = build_all(conn, archive_root=archive_root, incremental=incremental)
     click.echo(

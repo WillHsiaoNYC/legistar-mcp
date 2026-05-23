@@ -94,3 +94,19 @@ def index_event_file(conn: Connection, json_path: Path, archive_root: Path) -> N
              item.get("MinutesNote") or ""),
         )
         next_rowid += 1
+
+
+def index_person_file(conn: Connection, json_path: Path, archive_root: Path) -> None:
+    with open(json_path, encoding="utf-8") as f:
+        p = json.load(f)
+    rel_path = str(json_path.resolve().relative_to(archive_root.resolve()))
+    conn.execute(
+        """INSERT OR REPLACE INTO people
+           (slug, id, full_name, is_active, start_date, end_date, path)
+           VALUES (?,?,?,?,?,?,?)""",
+        (
+            p.get("Slug"), p.get("ID"), p.get("FullName"),
+            1 if p.get("IsActive") else 0,
+            p.get("Start"), p.get("End"), rel_path,
+        ),
+    )

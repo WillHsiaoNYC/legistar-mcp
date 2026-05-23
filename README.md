@@ -55,31 +55,53 @@ shape regardless of which fork it's pointed at.
 
 ### 2. Install
 
+Direct install from GitHub (no clone needed):
+
 ```sh
-uv tool install legistar-mcp
+uv tool install git+https://github.com/WillHsiaoNYC/legistar-mcp
 ```
 
-This puts `legistar-mcp` on your `PATH`.
+Or install from a local clone (useful if you want to read/modify the source):
+
+```sh
+git clone https://github.com/WillHsiaoNYC/legistar-mcp
+cd legistar-mcp
+uv tool install .
+```
+
+Either way, `legistar-mcp` ends up on your `PATH`. Verify with:
+
+```sh
+legistar-mcp --help
+```
+
+(Not yet on PyPI — that'll come once the API surface stabilizes.)
 
 ### 3. Build the index (one-time)
 
-Point `--archive` at your clone and `--db` at where you want the SQLite file:
+Point `--archive` at your archive clone and `--db` at where you want the
+SQLite file written. For example, if both `nyc_legislation` and a fresh
+`data/` directory live in your home:
 
 ```sh
 legistar-mcp index \
-  --archive /path/to/nyc_legislation \
-  --db /path/to/legistar.db
+  --archive ~/nyc_legislation \
+  --db ~/data/legistar.db
 ```
 
-On a typical dev machine this takes around 80 seconds and emits:
+This walks ~37k JSON files and writes ~105 MB to disk. **There's no progress
+bar** — it'll be silent for about 80 seconds, then print:
 
 ```
 Indexed: bills=19656 events=16776 people=247
 ```
 
-The DB ends up around 105 MB. `--archive` defaults from `LEGISTAR_ARCHIVE_PATH`
-and `--db` defaults from `LEGISTAR_DB_PATH` if you'd rather set those in the
-environment.
+If you don't see those numbers within a minute or two on a normal dev machine,
+something is wrong — `Ctrl-C` and double-check `--archive` points at a real
+clone of the JSON archive.
+
+`--archive` falls back to `$LEGISTAR_ARCHIVE_PATH` and `--db` falls back to
+`$LEGISTAR_DB_PATH` if you'd rather set those in your shell environment.
 
 ### 4. Configure Claude Desktop
 

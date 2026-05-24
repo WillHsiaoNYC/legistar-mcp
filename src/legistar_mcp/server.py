@@ -290,7 +290,14 @@ def make_server() -> FastMCP:
     @server.tool()
     @_db_locked
     def vote_breakdown(bill_id: int, limit: int = 100) -> list[dict]:
-        """Every council member's vote on a specific bill, sorted most-recent first. NULL-date rows (rare) are placed last. Returns person_slug, full_name, vote_value per row."""
+        """Every council member's vote on a specific bill, sorted most-recent first.
+
+        Returns rows with: person_slug, full_name (NULL if no people row indexed),
+        vote_value, vote_date, event_id, action (e.g. 'Approved by Committee'),
+        passed_flag (0/1 indicating whether the action passed). NULL-date rows
+        (rare) are placed last. Limit defaults to 100; raise it for omnibus
+        bills with many vote rows.
+        """
         return _vote_breakdown(conn, bill_id=bill_id, limit=limit)
 
     return server

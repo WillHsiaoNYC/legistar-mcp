@@ -62,16 +62,23 @@ def get_voting_record(
 def vote_breakdown(conn: Connection, bill_id: int, limit: int = 100) -> list[dict]:
     """Every council member's vote on a specific bill, across all history records.
 
-    Returns rows with: person_slug, full_name (NULL if no people row indexed),
-    vote_value, vote_date, event_id, action, passed_flag.
+    Returns rows with seven columns:
+      - person_slug
+      - full_name (NULL if no people row indexed)
+      - vote_value (e.g. 'Affirmative', 'Negative', 'Abstain')
+      - vote_date
+      - event_id (NULL for filing actions or history entries without an event)
+      - action (e.g. 'Approved by Committee')
+      - passed_flag (0/1 indicating whether the action passed)
 
-    Rows with NULL `event_id` are unusual but legal — they represent filing
-    actions or other history entries that don't reference a specific event.
     Rows with NULL vote_date (rare history entries) are placed at the END of
     the result rather than the top: SQLite's default DESC ordering puts NULLs
     first, which is the opposite of what callers expect for "most-recent first".
 
-    Raises StaleIndexError if the votes table is empty post-upgrade.
+    Limit defaults to 100; pass higher for omnibus bills with many vote rows.
+
+    Raises StaleIndexError if the votes table is empty post-upgrade (run
+    `--full` to backfill).
     """
     _check_table_populated(conn, "votes", "bills")
 

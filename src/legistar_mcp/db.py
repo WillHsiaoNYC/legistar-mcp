@@ -1,7 +1,16 @@
 import sqlite3
+import sys
 from pathlib import Path
 
 SCHEMA_PATH = Path(__file__).parent / "index" / "schema.sql"
+
+# Bumped whenever a code release ships a schema/data change that requires a
+# `legistar-mcp index --full` re-run to populate. See _warn_if_stale().
+#
+# Version history:
+#   1 — `guid` columns added to bills and events; needs --full to backfill
+#       (existing rows have NULL guid until rebuilt).
+SCHEMA_VERSION = 1
 
 
 def open_db(db_path: Path) -> sqlite3.Connection:
@@ -10,6 +19,7 @@ def open_db(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     _migrate(conn)
+    _warn_if_stale(conn)
     return conn
 
 
@@ -37,3 +47,32 @@ def _migrate(conn: sqlite3.Connection) -> None:
         if "guid" not in cols:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN guid TEXT")
     conn.commit()
+
+
+def _warn_if_stale(conn: sqlite3.Connection) -> None:
+    """Warn the user (via stderr) if their indexed data is older than the schema
+    version this code expects.
+
+    Triggers when (a) the bills table exists and has rows, and (b) the stored
+    PRAGMA user_version is below SCHEMA_VERSION. The version is bumped by
+    build_all() after a successful --full reindex, so the warning auto-clears
+    once the user runs `legistar-mcp index --full`.
+
+    Quiet on empty / brand-new / current-version DBs.
+    """
+    has_bills = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='bills'"
+    ).fetchone()
+    if not has_bills:
+        return
+    row_count = conn.execute("SELECT COUNT(*) FROM bills").fetchone()[0]
+    if row_count == 0:
+        return
+    current = conn.execute("PRAGMA user_version").fetchone()[0]
+    if current >= SCHEMA_VERSION:
+        return
+    sys.stderr.write(
+        f"⚠ legistar-mcp: indexed data is at schema version {current}, "
+        f"code expects {SCHEMA_VERSION}. Run `legistar-mcp index --full` "
+        f"to backfill new columns/tables, then this warning will clear.\n"
+    )

@@ -6,6 +6,7 @@ from sqlite3 import Connection
 
 import click
 
+from ..db import SCHEMA_VERSION
 from .build import index_bill_file, index_event_file, index_person_file
 
 
@@ -99,6 +100,12 @@ def build_all(
         for p in it:
             index_person_file(conn, p, archive_root)
             stats["people"] += 1
+
+    # Only a full rebuild guarantees every row matches the current schema
+    # (incremental skips unchanged files, so new columns/tables may stay NULL
+    # or empty). Bump user_version only when the data is known consistent.
+    if not incremental:
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     conn.commit()
     return stats

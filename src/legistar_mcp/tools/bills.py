@@ -131,3 +131,94 @@ def get_bill(
         bill = json.load(f)
     bill["LegistarURL"] = _legistar_url(bill.get("ID"), bill.get("GUID"))
     return bill
+
+
+_ALLOWED_GROUP_BY = {
+    "status_name", "type_name", "body_name", "sponsor_slug", "intro_year",
+}
+
+
+def aggregate_bills(
+    conn: Connection,
+    group_by: list[str],
+    year_from: int | None = None,
+    year_to: int | None = None,
+    status: str | None = None,
+    type: str | None = None,
+    committee: str | None = None,
+    sponsor_slug: str | None = None,
+    agency: str | None = None,
+    limit: int = 100,
+) -> list[dict]:
+    """Group bills by the requested dimensions and return per-group counts.
+
+    Allowed group_by values: status_name, type_name, body_name, sponsor_slug,
+    intro_year. Filters mirror search_bills (year/agency/status/etc.).
+
+    Note on interactions: passing sponsor_slug as both a filter and a
+    group_by dimension will produce a single-row aggregate (filtered to that
+    one slug). Passing agency triggers an FTS5 join that may slow large
+    aggregations; bound results with `limit`.
+    """
+    if not group_by:
+        raise ValueError("group_by must contain at least one dimension")
+    for g in group_by:
+        if g not in _ALLOWED_GROUP_BY:
+            raise ValueError(
+                f"unsupported group_by dimension: {g!r}. "
+                f"Allowed: {sorted(_ALLOWED_GROUP_BY)}"
+            )
+
+    # Expression per dimension. intro_year cast to INTEGER so callers don't
+    # get string years that sort lexically.
+    expr = {
+        "status_name": "bills.status_name",
+        "type_name": "bills.type_name",
+        "body_name": "bills.body_name",
+        "sponsor_slug": "s.person_slug",
+        "intro_year": "CAST(substr(bills.intro_date, 1, 4) AS INTEGER)",
+    }
+    select_cols = [f"{expr[g]} AS {g}" for g in group_by]
+
+    where, params, joins = [], [], []
+    if "sponsor_slug" in group_by:
+        joins.append("LEFT JOIN sponsors s ON bills.id = s.bill_id")
+    if agency:
+        query = resolve_to_fts_query(agency, _get_agencies())
+        joins.append("JOIN bills_fts_map m ON bills.id = m.bill_id")
+        joins.append("JOIN bills_fts f ON m.fts_rowid = f.rowid")
+        where.append("bills_fts MATCH ?")
+        params.append(query)
+    if year_from:
+        where.append("bills.intro_date >= ?")
+        params.append(f"{year_from}-01-01")
+    if year_to:
+        where.append("bills.intro_date <= ?")
+        params.append(f"{year_to}-12-31")
+    if status:
+        where.append("bills.status_name = ?")
+        params.append(status)
+    if type:
+        where.append("bills.type_name = ?")
+        params.append(type)
+    if committee:
+        where.append("bills.body_name = ?")
+        params.append(committee)
+    if sponsor_slug:
+        if "sponsor_slug" not in group_by:
+            joins.append("LEFT JOIN sponsors s ON bills.id = s.bill_id")
+        where.append("s.person_slug = ?")
+        params.append(sponsor_slug)
+
+    sql = (
+        f"SELECT {', '.join(select_cols)}, COUNT(DISTINCT bills.id) AS count "
+        f"FROM bills {' '.join(joins)}"
+    )
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += f" GROUP BY {', '.join(group_by)}"
+    sql += " ORDER BY count DESC, " + ", ".join(group_by)
+    sql += " LIMIT ?"
+    params.append(limit)
+
+    return [dict(r) for r in conn.execute(sql, params).fetchall()]

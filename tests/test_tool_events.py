@@ -105,6 +105,46 @@ def test_get_bill_hearings_raises_stale_index_when_event_items_empty(indexed_db)
         get_bill_hearings(indexed_db, file="Int 0153-2022")
 
 
+@freeze_time("2024-08-01")
+def test_get_bill_hearings_only_upcoming_sorts_earliest_first(indexed_db):
+    """When only_upcoming=True, the nearest-future hearing must come first.
+
+    Insert three synthetic future events + event_items for an existing bill
+    and verify the result order is ASC by date (next hearing first).
+    """
+    from legistar_mcp.tools.events import get_bill_hearings
+
+    # Synthetic future events for bill 68628 (Int 0153-2022).
+    rows = [
+        (90001, "GUID-1", 1, "Committee A", "2024-09-10T10:00:00-04:00", "Loc", "events/x1.json"),
+        (90002, "GUID-2", 1, "Committee A", "2024-08-15T10:00:00-04:00", "Loc", "events/x2.json"),
+        (90003, "GUID-3", 1, "Committee A", "2024-10-05T10:00:00-04:00", "Loc", "events/x3.json"),
+    ]
+    for r in rows:
+        indexed_db.execute(
+            "INSERT INTO events (id, guid, body_id, body_name, date, location, path) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            r,
+        )
+    items = [
+        (900011, 90001, 68628, "title", 1, "Action"),
+        (900021, 90002, 68628, "title", 1, "Action"),
+        (900031, 90003, 68628, "title", 1, "Action"),
+    ]
+    for it in items:
+        indexed_db.execute(
+            "INSERT INTO event_items "
+            "(item_id, event_id, bill_id, item_title, item_sequence, action_name) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            it,
+        )
+    indexed_db.commit()
+
+    results = get_bill_hearings(indexed_db, id=68628, only_upcoming=True)
+    future_ids = [r["id"] for r in results if r["id"] in {90001, 90002, 90003}]
+    assert future_ids == [90002, 90001, 90003]  # ASC by date
+
+
 def test_get_event_bills_returns_bills_for_known_event(indexed_db):
     from legistar_mcp.tools.events import get_event_bills
     results = get_event_bills(indexed_db, event_id=21015)

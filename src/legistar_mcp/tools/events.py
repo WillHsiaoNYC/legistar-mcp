@@ -189,7 +189,12 @@ def get_bill_hearings(
     if only_upcoming:
         sql += " AND events.date >= ?"
         params.append(_dt.date.today().isoformat())
-    sql += " ORDER BY events.date DESC, ei.item_sequence ASC LIMIT ?"
+        # "Next hearing" semantics: nearest-future first. When only_upcoming
+        # is False the caller is browsing history, so most-recent-first
+        # (DESC) is the sensible default for that branch.
+        sql += " ORDER BY events.date ASC, ei.item_sequence ASC LIMIT ?"
+    else:
+        sql += " ORDER BY events.date DESC, ei.item_sequence ASC LIMIT ?"
     params.append(limit)
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     for r in rows:

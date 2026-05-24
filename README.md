@@ -198,6 +198,12 @@ changed since your last index — a few seconds when nothing changed, ~30s on
 busy days, ~80s with `--full`. Default is `--incremental`; pass `--full` to
 rebuild from scratch.
 
+**Upgrading the package?** Schema-bumping releases (anything that adds new
+tables or columns) require `--full` to backfill the new data across the
+whole archive. The indexer will refuse `--incremental` and tell you to
+re-run with `--full` until your DB schema is current. Don't ignore the
+message — your tools will silently return partial results otherwise.
+
 Restart your AI agent to pick up the new data.
 
 ## Troubleshooting

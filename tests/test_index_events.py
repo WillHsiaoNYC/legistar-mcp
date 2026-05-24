@@ -14,15 +14,26 @@ def test_index_event_inserts_row(tmp_path, events_dir):
     assert row["date"]
 
 
-def test_index_event_writes_one_fts_row_per_item(tmp_path, events_dir):
+def test_index_event_writes_one_fts_row_per_item(tmp_path, fixtures_root):
+    """Every Items[] entry should produce exactly one events_fts_map row.
+
+    Computes expected from the fixture itself so the assertion stays tight as
+    fixtures grow — a regression that drops 1 of 4 items still fails.
+    """
+    import json
+
     conn = init_db(tmp_path / "t.db")
-    p = next(events_dir.glob("*.json"))
-    index_event_file(conn, p, archive_root=events_dir.parent)
+    fixture_event = fixtures_root / "events" / "2024_city-council.json"
+    index_event_file(conn, fixture_event, archive_root=fixtures_root)
     conn.commit()
+    with open(fixture_event, encoding="utf-8") as f:
+        evt = json.load(f)
+    expected_items = len(evt.get("Items") or [])
+    assert expected_items >= 2, "fixture must have multiple items to exercise the index"
     n_items = conn.execute(
-        "SELECT COUNT(*) FROM events_fts_map WHERE event_id = (SELECT id FROM events LIMIT 1)"
+        "SELECT COUNT(*) FROM events_fts_map WHERE event_id = ?", (evt["ID"],)
     ).fetchone()[0]
-    assert n_items >= 1
+    assert n_items == expected_items
 
 
 def test_index_event_populates_event_items_for_matter(tmp_path, fixtures_root):

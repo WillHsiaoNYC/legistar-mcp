@@ -6,6 +6,7 @@ from sqlite3 import Connection
 from .._db_utils import _check_table_populated
 from ..agency import resolve_to_fts_query
 from ._snippet import _archive_root, _build_snippet, _extract_phrases, _get_agencies
+from .bills import _legistar_url as _legistar_url_bill
 
 # events_fts column order: item_title (0), agenda_note (1), minutes_note (2).
 # When building snippets server-side we map JSON keys to display labels.
@@ -206,8 +207,6 @@ def get_event_bills(conn: Connection, event_id: int) -> list[dict]:
     """Bills on the agenda for a specific event. Raises StaleIndexError if
     the event_items table is empty post-upgrade."""
     _check_table_populated(conn, "event_items", "events")
-
-    from .bills import _legistar_url as _legistar_url_bill
 
     sql = (
         "SELECT bills.id, bills.guid, bills.file, bills.title, bills.status_name, "

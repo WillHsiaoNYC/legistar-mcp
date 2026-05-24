@@ -52,8 +52,11 @@ def search_bills(
         where.append("bills.intro_date >= ?")
         params.append(f"{year_from}-01-01")
     if year_to:
-        where.append("bills.intro_date <= ?")
-        params.append(f"{year_to}-12-31")
+        # intro_date stores full ISO timestamps like "2024-12-31T00:00:00Z";
+        # a date-only inclusive upper bound would lex-exclude Dec 31 entries.
+        # Use the first day of the next year as an exclusive upper bound.
+        where.append("bills.intro_date < ?")
+        params.append(f"{year_to + 1}-01-01")
     if status:
         where.append("bills.status_name = ?")
         params.append(status)
@@ -194,8 +197,10 @@ def aggregate_bills(
         where.append("bills.intro_date >= ?")
         params.append(f"{year_from}-01-01")
     if year_to:
-        where.append("bills.intro_date <= ?")
-        params.append(f"{year_to}-12-31")
+        # See search_bills above — exclusive upper bound by next-year-Jan-1
+        # so Dec 31 ISO timestamps aren't lex-excluded.
+        where.append("bills.intro_date < ?")
+        params.append(f"{year_to + 1}-01-01")
     if status:
         where.append("bills.status_name = ?")
         params.append(status)

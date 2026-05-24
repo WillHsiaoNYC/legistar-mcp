@@ -10,6 +10,8 @@ SCHEMA_PATH = Path(__file__).parent / "index" / "schema.sql"
 # Version history:
 #   1 — `guid` columns added to bills and events; needs --full to backfill
 #       (existing rows have NULL guid until rebuilt).
+#   2 — `event_items` table added for bill↔event linkage (Batch B). NULL for
+#       existing DBs until --full re-runs the event indexer.
 SCHEMA_VERSION = 1
 
 
@@ -46,6 +48,21 @@ def _migrate(conn: sqlite3.Connection) -> None:
             continue
         if "guid" not in cols:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN guid TEXT")
+    conn.commit()
+
+    # event_items is new in SCHEMA_VERSION 2 (Batch B, tools expansion).
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS event_items (
+            item_id INTEGER PRIMARY KEY,
+            event_id INTEGER NOT NULL REFERENCES events(id),
+            bill_id INTEGER NOT NULL,
+            item_title TEXT,
+            item_sequence INTEGER,
+            action_name TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_event_items_bill ON event_items(bill_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_event_items_event ON event_items(event_id)")
     conn.commit()
 
 

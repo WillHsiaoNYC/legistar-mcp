@@ -74,6 +74,17 @@ CREATE TABLE IF NOT EXISTS events_fts_map (
 );
 CREATE INDEX IF NOT EXISTS idx_events_fts_map_event ON events_fts_map(event_id);
 
+CREATE TABLE IF NOT EXISTS event_items (
+    item_id INTEGER PRIMARY KEY,               -- Items[].ID from source JSON; globally unique
+    event_id INTEGER NOT NULL REFERENCES events(id),
+    bill_id INTEGER NOT NULL,                  -- bills.id; may be absent if bill not indexed
+    item_title TEXT,
+    item_sequence INTEGER,                     -- AgendaSequence or MinutesSequence; may be 0
+    action_name TEXT                           -- Items[].ActionName, useful for "Approved", "Hearing Held", etc.
+);
+CREATE INDEX IF NOT EXISTS idx_event_items_bill ON event_items(bill_id);
+CREATE INDEX IF NOT EXISTS idx_event_items_event ON event_items(event_id);
+
 CREATE TABLE IF NOT EXISTS index_state (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

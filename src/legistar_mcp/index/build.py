@@ -59,6 +59,9 @@ def index_event_file(conn: Connection, json_path: Path, archive_root: Path) -> N
         e = json.load(f)
 
     rel_path = json_path.resolve().relative_to(archive_root.resolve()).as_posix()
+    # Clear stale event_items rows so reindexing a single event doesn't
+    # accumulate orphaned mirrors (Items[] can shrink between snapshots).
+    conn.execute("DELETE FROM event_items WHERE event_id = ?", (e["ID"],))
     conn.execute(
         """INSERT OR REPLACE INTO events
            (id, guid, body_id, body_name, date, location, last_modified, path)
@@ -92,6 +95,22 @@ def index_event_file(conn: Connection, json_path: Path, archive_root: Path) -> N
              item.get("MinutesNote") or ""),
         )
         next_rowid += 1
+
+        # Mirror to event_items for bill <-> event linkage queries.
+        if item.get("MatterID"):
+            conn.execute(
+                "INSERT OR REPLACE INTO event_items "
+                "(item_id, event_id, bill_id, item_title, item_sequence, action_name) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    item["ID"],
+                    e["ID"],
+                    item["MatterID"],
+                    item.get("Title"),
+                    seq,
+                    item.get("ActionName"),
+                ),
+            )
 
 
 def index_person_file(conn: Connection, json_path: Path, archive_root: Path) -> None:

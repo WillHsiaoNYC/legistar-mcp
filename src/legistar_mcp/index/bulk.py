@@ -50,6 +50,22 @@ def build_all(
     incremental: bool = False,
     show_progress: bool = False,
 ) -> dict[str, int]:
+    # Refuse to run incremental when the DB was indexed under an older schema
+    # version. Incremental only re-walks files whose LastModified changed, so
+    # tables/columns introduced by a newer release would stay empty/NULL for
+    # all the files that didn't change since the last index. The user gets a
+    # silently-partial DB and no warning. Force --full so new tables get
+    # backfilled across the whole archive. Check happens before any expensive
+    # filesystem walk.
+    current_version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if incremental and current_version < SCHEMA_VERSION:
+        raise RuntimeError(
+            f"Incremental reindex refused: schema version is {SCHEMA_VERSION} "
+            f"but indexed data is at version {current_version}. New tables added "
+            f"in this upgrade need to be backfilled across the whole archive. "
+            f"Re-run with --full to fix."
+        )
+
     # Persist archive_root so query-time tools can resolve relative bills.path
     # back to the source JSON (needed for building snippets server-side, since
     # bills_fts is contentless and SQLite's snippet() returns NULL on it).

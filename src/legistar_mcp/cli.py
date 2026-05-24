@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 from pathlib import Path
 
 import click
@@ -55,12 +56,20 @@ def index(archive_root: Path, db_path: Path, incremental: bool) -> None:
     https://github.com/jehiah/nyc_legislation
     """
     conn = init_db(db_path)
-    stats = build_all(
-        conn,
-        archive_root=archive_root,
-        incremental=incremental,
-        show_progress=True,
-    )
+    try:
+        stats = build_all(
+            conn,
+            archive_root=archive_root,
+            incremental=incremental,
+            show_progress=True,
+        )
+    except RuntimeError as exc:
+        # build_all raises RuntimeError when a stale-schema DB is asked to do
+        # an incremental reindex. Surface the message cleanly rather than as a
+        # Python traceback — end users running the CLI are unlikely to read
+        # past the first traceback line.
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
     click.echo(
         f"Indexed: bills={stats['bills']} events={stats['events']} people={stats['people']}"
     )

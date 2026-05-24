@@ -149,6 +149,11 @@ If the tools don't appear at all, jump to [Troubleshooting](#troubleshooting).
 | `search_events` | Hearings/events by `query`, `agency`, `committee`, `date_from`, `date_to`. Includes per-item `mentions` snippets when `agency` is used. |
 | `get_event` | Full event record by numeric `id` — agenda items, minutes notes, votes. |
 | `list_committees` | All committees with bill + event counts. Useful for orienting. |
+| `aggregate_bills` | Per-group counts when bills are grouped by one or more dimensions (`status_name`, `type_name`, `body_name`, `sponsor_slug`, `intro_year`). Same filter surface as `search_bills`. |
+| `list_vocabulary` | Distinct non-null values for a known column (`status_name`, `type_name`, `body_name`, `event_committee`) — discover the exact spelling of statuses, types, and committees. |
+| `recent_bills` | Bills introduced within the last `days` days. Convenience wrapper; for agency-scoped searches use `search_bills(agency=...)`. |
+| `upcoming_events` | Events scheduled in the next `days` days. Optional `committee` body_name filter. |
+| `co_sponsors` | Council members who have co-sponsored the most bills with a given person (`slug`). Returns slug, full_name, and overlap_count. |
 
 ## Example: bills involving the Mayor's Office of Operations
 

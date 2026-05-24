@@ -1,4 +1,4 @@
-"""MCP stdio server wiring the 7 Legistar tools.
+"""MCP stdio server wiring the 12 Legistar tools.
 
 Reads `LEGISTAR_DB_PATH` from the environment at startup and fails fast if it
 is missing or doesn't exist. The archive root is read from the indexed DB
@@ -16,13 +16,18 @@ from mcp.server.fastmcp import FastMCP
 
 from .db import open_db
 from .tools._snippet import _archive_root
+from .tools.bills import aggregate_bills as _aggregate_bills
 from .tools.bills import get_bill as _get_bill
+from .tools.bills import recent_bills as _recent_bills
 from .tools.bills import search_bills as _search_bills
 from .tools.committees import list_committees as _list_committees
 from .tools.events import get_event as _get_event
 from .tools.events import search_events as _search_events
+from .tools.events import upcoming_events as _upcoming_events
 from .tools.people import get_person as _get_person
 from .tools.people import search_people as _search_people
+from .tools.relationships import co_sponsors as _co_sponsors
+from .tools.vocab import list_vocabulary as _list_vocabulary
 
 
 def _load_env_db_path() -> Path:
@@ -40,7 +45,7 @@ def _load_env_db_path() -> Path:
 
 
 def make_server() -> FastMCP:
-    """Construct a FastMCP server with all 7 Legistar tools registered.
+    """Construct a FastMCP server with all 12 Legistar tools registered.
 
     Resolves the DB and archive_root eagerly so misconfiguration surfaces at
     startup, not on the first tool call.
@@ -137,6 +142,65 @@ def make_server() -> FastMCP:
     def list_committees() -> list[dict]:
         """List all committees with bill and event counts."""
         return _list_committees(conn)
+
+    @server.tool()
+    def aggregate_bills(
+        group_by: list[str],
+        year_from: int | None = None,
+        year_to: int | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        committee: str | None = None,
+        sponsor_slug: str | None = None,
+        agency: str | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Group bills by one or more dimensions (status_name, type_name, body_name, sponsor_slug, intro_year) and return per-group counts. Supports search_bills filters."""
+        return _aggregate_bills(
+            conn,
+            group_by=group_by,
+            year_from=year_from,
+            year_to=year_to,
+            status=status,
+            type=type,
+            committee=committee,
+            sponsor_slug=sponsor_slug,
+            agency=agency,
+            limit=limit,
+        )
+
+    @server.tool()
+    def list_vocabulary(field: str) -> list[str]:
+        """Return distinct non-null values for a known DB column (status_name, type_name, body_name, event_committee). Helps you discover the exact spelling of statuses, types, and committees."""
+        return _list_vocabulary(conn, field=field)
+
+    @server.tool()
+    def recent_bills(
+        days: int = 7,
+        status: str | None = None,
+        type: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Bills introduced within the last `days` days. Convenience wrapper — for agency-scoped searches use search_bills(agency=...) instead."""
+        return _recent_bills(conn, days=days, status=status, type=type, limit=limit)
+
+    @server.tool()
+    def upcoming_events(
+        days: int = 14,
+        committee: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Events scheduled in the next `days` days. Filter by committee body_name."""
+        return _upcoming_events(conn, days=days, committee=committee, limit=limit)
+
+    @server.tool()
+    def co_sponsors(
+        slug: str,
+        min_overlap: int = 5,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Council members who have co-sponsored the most bills with a given person (by slug). Returns slug, full_name, and overlap_count, sorted by overlap_count DESC."""
+        return _co_sponsors(conn, slug=slug, min_overlap=min_overlap, limit=limit)
 
     return server
 

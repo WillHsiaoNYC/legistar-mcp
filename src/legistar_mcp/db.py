@@ -97,9 +97,13 @@ def _migrate(conn: sqlite3.Connection) -> None:
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_votes_bill ON votes(bill_id)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_votes_event ON votes(event_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_votes_person ON votes(person_slug)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_votes_person_date ON votes(person_slug, vote_date)")
+    # idx_votes_event was added in v0.2.0 but no shipped query filters by
+    # event_id. Drop it on upgrade to reclaim write throughput on indexing.
+    # New DBs never get it (removed from schema.sql); existing v0.2.0 DBs
+    # have it cleaned out here. Safe no-op when the index isn't present.
+    conn.execute("DROP INDEX IF EXISTS idx_votes_event")
     conn.commit()
 
 

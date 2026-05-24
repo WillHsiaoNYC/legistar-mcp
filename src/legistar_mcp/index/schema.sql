@@ -97,9 +97,9 @@ CREATE TABLE IF NOT EXISTS votes (
     PRIMARY KEY (history_record_id, person_slug)
 );
 CREATE INDEX IF NOT EXISTS idx_votes_bill ON votes(bill_id);
-CREATE INDEX IF NOT EXISTS idx_votes_event ON votes(event_id);
 CREATE INDEX IF NOT EXISTS idx_votes_person ON votes(person_slug);
 CREATE INDEX IF NOT EXISTS idx_votes_person_date ON votes(person_slug, vote_date);
+-- (idx_votes_event was removed in v0.2.x: no shipped query filters by event_id.)
 
 CREATE TABLE IF NOT EXISTS index_state (
     key TEXT PRIMARY KEY,

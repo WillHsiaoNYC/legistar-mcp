@@ -35,11 +35,14 @@ def test_schema_creates_event_items_and_votes_indexes():
         # event_items (SCHEMA_VERSION 2, Batch B)
         "idx_event_items_bill",
         "idx_event_items_event",
-        # votes (SCHEMA_VERSION 3, Batch C)
+        # votes (SCHEMA_VERSION 3, Batch C). idx_votes_event was dropped in
+        # v0.2.x — no shipped query filters by event_id.
         "idx_votes_bill",
-        "idx_votes_event",
         "idx_votes_person",
         "idx_votes_person_date",
     }
     missing = expected - indexes
     assert not missing, f"missing indexes: {missing}"
+    assert "idx_votes_event" not in indexes, (
+        "idx_votes_event was removed; schema.sql should not recreate it"
+    )

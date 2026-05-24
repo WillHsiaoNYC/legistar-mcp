@@ -59,6 +59,23 @@ def test_get_voting_record_includes_bill_context(indexed_db):
     assert moo_hits[0]["file"] == "Int 0153-2022"
 
 
+def test_get_voting_record_year_to_includes_dec_31(indexed_db):
+    """A vote on 2024-12-31 (full ISO timestamp) must be returned by
+    year_to=2024. Old code compared against "2024-12-31" lex which
+    excluded any timestamp suffix."""
+    indexed_db.execute(
+        "INSERT INTO votes "
+        "(history_record_id, person_slug, bill_id, event_id, vote_value, "
+        " vote_date, action, passed_flag) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (999001, "synthetic-slug", 68628, None, "Affirmative",
+         "2024-12-31T23:59:59Z", "Vote", 1),
+    )
+    indexed_db.commit()
+    results = get_voting_record(indexed_db, slug="synthetic-slug", year_to=2024)
+    assert any(r["vote_date"] == "2024-12-31T23:59:59Z" for r in results)
+
+
 def test_get_voting_record_raises_stale_index_when_votes_empty(indexed_db):
     indexed_db.execute("DELETE FROM votes")
     row = indexed_db.execute("SELECT slug FROM people LIMIT 1").fetchone()

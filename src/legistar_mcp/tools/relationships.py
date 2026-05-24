@@ -47,8 +47,10 @@ def get_voting_record(
         sql += " AND v.vote_date >= ?"
         params.append(f"{year_from}-01-01")
     if year_to:
-        sql += " AND v.vote_date <= ?"
-        params.append(f"{year_to}-12-31")
+        # v.vote_date stores full ISO timestamps; a date-only inclusive upper
+        # would lex-exclude Dec 31 votes. Use next-year-Jan-1 exclusive.
+        sql += " AND v.vote_date < ?"
+        params.append(f"{year_to + 1}-01-01")
     if vote_value:
         sql += " AND v.vote_value = ?"
         params.append(vote_value)

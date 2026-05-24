@@ -137,10 +137,14 @@ def upcoming_events(
 ) -> list[dict]:
     """Events in the next `days` days. Same row shape as search_events."""
     today = _dt.date.today().isoformat()
-    cutoff = (_dt.date.today() + _dt.timedelta(days=days)).isoformat()
+    # Exclusive upper bound: cutoff is the first day OUTSIDE the window, so
+    # events.date values that start with the last in-window day (full ISO
+    # timestamps like "2024-08-15T13:30:00-04:00") still match. A lex compare
+    # against a date-only cutoff would otherwise drop events on the cutoff day.
+    cutoff = (_dt.date.today() + _dt.timedelta(days=days + 1)).isoformat()
     sql = (
         "SELECT events.id, events.guid, events.body_name, events.date, events.location "
-        "FROM events WHERE events.date >= ? AND events.date <= ?"
+        "FROM events WHERE events.date >= ? AND events.date < ?"
     )
     params: list = [today, cutoff]
     if committee:

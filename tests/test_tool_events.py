@@ -60,6 +60,16 @@ def test_upcoming_events_empty_when_no_future(indexed_db):
 
 
 @freeze_time("2024-08-01")
+def test_upcoming_events_includes_boundary_day(indexed_db):
+    # Fixture event is 2024-08-15T13:30:00-04:00. Frozen 2024-08-01 + days=14
+    # makes the cutoff day exactly 2024-08-15. The function must include
+    # events whose date STARTS with that day even though the stored value is
+    # a full ISO timestamp lex-greater than "2024-08-15".
+    results = upcoming_events(indexed_db, days=14, limit=10)
+    assert any(r["date"].startswith("2024-08-15") for r in results)
+
+
+@freeze_time("2024-08-01")
 def test_upcoming_events_have_legistar_url(indexed_db):
     results = upcoming_events(indexed_db, days=30)
     assert results and "legistar_url" in results[0]

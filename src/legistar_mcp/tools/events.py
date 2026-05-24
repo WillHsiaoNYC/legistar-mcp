@@ -1,3 +1,4 @@
+import datetime as _dt
 import json
 from pathlib import Path
 from sqlite3 import Connection
@@ -125,3 +126,28 @@ def get_event(conn: Connection, archive_root: Path, id: int) -> dict | None:
         event = json.load(f)
     event["LegistarURL"] = _legistar_url(event.get("ID"), event.get("GUID"))
     return event
+
+
+def upcoming_events(
+    conn: Connection,
+    days: int = 14,
+    committee: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """Events in the next `days` days. Same row shape as search_events."""
+    today = _dt.date.today().isoformat()
+    cutoff = (_dt.date.today() + _dt.timedelta(days=days)).isoformat()
+    sql = (
+        "SELECT events.id, events.guid, events.body_name, events.date, events.location "
+        "FROM events WHERE events.date >= ? AND events.date <= ?"
+    )
+    params: list = [today, cutoff]
+    if committee:
+        sql += " AND events.body_name = ?"
+        params.append(committee)
+    sql += " ORDER BY events.date ASC LIMIT ?"
+    params.append(limit)
+    rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    for r in rows:
+        r["legistar_url"] = _legistar_url(r.get("id"), r.pop("guid", None))
+    return rows

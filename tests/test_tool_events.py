@@ -1,8 +1,9 @@
 import pytest
+from freezegun import freeze_time
 
 from legistar_mcp.db import init_db
 from legistar_mcp.index.bulk import build_all
-from legistar_mcp.tools.events import search_events
+from legistar_mcp.tools.events import search_events, upcoming_events
 
 
 @pytest.fixture
@@ -42,3 +43,23 @@ def test_search_events_results_include_legistar_url(indexed_db):
     )
     # The transient guid column from the SELECT must not leak into output.
     assert "guid" not in hit
+
+
+@freeze_time("2024-08-01")
+def test_upcoming_events_within_window(indexed_db):
+    # Fixture event is 2024-08-15. Frozen 2024-08-01 + days=30 catches it.
+    results = upcoming_events(indexed_db, days=30, limit=10)
+    assert results
+    assert all(r["date"] >= "2024-08-01" for r in results)
+
+
+@freeze_time("2024-08-20")
+def test_upcoming_events_empty_when_no_future(indexed_db):
+    # Past the fixture event's date — empty.
+    assert upcoming_events(indexed_db, days=14) == []
+
+
+@freeze_time("2024-08-01")
+def test_upcoming_events_have_legistar_url(indexed_db):
+    results = upcoming_events(indexed_db, days=30)
+    assert results and "legistar_url" in results[0]

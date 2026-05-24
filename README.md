@@ -156,6 +156,8 @@ If the tools don't appear at all, jump to [Troubleshooting](#troubleshooting).
 | `co_sponsors` | Council members who have co-sponsored the most bills with a given person (`slug`). Returns slug, full_name, and overlap_count. |
 | `get_bill_hearings` | Events where a given bill was on the agenda (lookup by `file` like `Int 0153-2022` or numeric `id`). Set `only_upcoming=True` to filter to future events. |
 | `get_event_bills` | Bills on the agenda for a specific event, sorted by agenda sequence. |
+| `get_voting_record` | Every vote a council member (`slug`) has cast — filter by `year_from`/`year_to` and `vote_value` (e.g., 'Affirmative', 'Negative', 'Absent'). |
+| `vote_breakdown` | Every council member's vote on a specific bill (`bill_id`). |
 
 ## Example: bills involving the Mayor's Office of Operations
 

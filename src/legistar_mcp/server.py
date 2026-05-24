@@ -1,4 +1,4 @@
-"""MCP stdio server wiring the 14 Legistar tools.
+"""MCP stdio server wiring the 16 Legistar tools.
 
 Reads `LEGISTAR_DB_PATH` from the environment at startup and fails fast if it
 is missing or doesn't exist. The archive root is read from the indexed DB
@@ -29,6 +29,8 @@ from .tools.events import upcoming_events as _upcoming_events
 from .tools.people import get_person as _get_person
 from .tools.people import search_people as _search_people
 from .tools.relationships import co_sponsors as _co_sponsors
+from .tools.relationships import get_voting_record as _get_voting_record
+from .tools.relationships import vote_breakdown as _vote_breakdown
 from .tools.vocab import list_vocabulary as _list_vocabulary
 
 
@@ -47,7 +49,7 @@ def _load_env_db_path() -> Path:
 
 
 def make_server() -> FastMCP:
-    """Construct a FastMCP server with all 14 Legistar tools registered.
+    """Construct a FastMCP server with all 16 Legistar tools registered.
 
     Resolves the DB and archive_root eagerly so misconfiguration surfaces at
     startup, not on the first tool call.
@@ -218,6 +220,29 @@ def make_server() -> FastMCP:
     def get_event_bills(event_id: int) -> list[dict]:
         """Bills on the agenda for a specific event. Returns rows sorted by item_sequence ascending."""
         return _get_event_bills(conn, event_id=event_id)
+
+    @server.tool()
+    def get_voting_record(
+        slug: str,
+        year_from: int | None = None,
+        year_to: int | None = None,
+        vote_value: str | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Every vote cast by a council member (by `slug`), optionally filtered by year range and vote_value (e.g., 'Affirmative', 'Negative', 'Absent'). Returns vote_value, vote_date, bill context."""
+        return _get_voting_record(
+            conn,
+            slug=slug,
+            year_from=year_from,
+            year_to=year_to,
+            vote_value=vote_value,
+            limit=limit,
+        )
+
+    @server.tool()
+    def vote_breakdown(bill_id: int) -> list[dict]:
+        """Every council member's vote on a specific bill, across all history records. Returns person_slug, full_name, vote_value per row."""
+        return _vote_breakdown(conn, bill_id=bill_id)
 
     return server
 

@@ -14,7 +14,7 @@ SCHEMA_PATH = Path(__file__).parent / "index" / "schema.sql"
 #       existing DBs until --full re-runs the event indexer.
 #   3 — `votes` table added for council voting records (Batch C). Empty for
 #       existing DBs until --full re-runs the bill indexer.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def open_db(db_path: Path) -> sqlite3.Connection:

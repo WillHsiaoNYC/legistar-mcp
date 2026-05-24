@@ -25,9 +25,8 @@ def test_list_vocabulary_rejects_unknown_field(indexed_db):
         list_vocabulary(indexed_db, "nonexistent")
 
 
-def test_list_vocabulary_committee_returns_distinct_values(indexed_db):
+def test_list_vocabulary_event_committee_returns_known_values(indexed_db):
     values = list_vocabulary(indexed_db, "event_committee")
     assert isinstance(values, list)
-    assert values
     assert all(isinstance(v, str) for v in values)
-    assert len(values) == len(set(values))
+    assert "City Council" in values

@@ -100,7 +100,12 @@ def test_get_bill_hearings_requires_file_or_id(indexed_db):
 def test_get_bill_hearings_raises_stale_index_when_event_items_empty(indexed_db):
     from legistar_mcp.tools.events import get_bill_hearings
     from legistar_mcp._db_utils import StaleIndexError
+    # Simulate the upgraded-but-not-full-reindexed state: schema version
+    # rolled back below SCHEMA_VERSION. Wiping event_items alone no longer
+    # triggers staleness (that was a false-positive-prone heuristic — see
+    # tests/test_db_utils.py); user_version is now the source of truth.
     indexed_db.execute("DELETE FROM event_items")
+    indexed_db.execute("PRAGMA user_version = 1")
     with pytest.raises(StaleIndexError, match="--full"):
         get_bill_hearings(indexed_db, file="Int 0153-2022")
 

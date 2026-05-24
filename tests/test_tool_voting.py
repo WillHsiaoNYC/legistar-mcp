@@ -77,7 +77,10 @@ def test_get_voting_record_year_to_includes_dec_31(indexed_db):
 
 
 def test_get_voting_record_raises_stale_index_when_votes_empty(indexed_db):
+    # Simulate post-upgrade pre-`--full` state: schema rolled back below
+    # SCHEMA_VERSION. user_version is now the source of truth for staleness.
     indexed_db.execute("DELETE FROM votes")
+    indexed_db.execute("PRAGMA user_version = 1")
     row = indexed_db.execute("SELECT slug FROM people LIMIT 1").fetchone()
     slug = row["slug"] if row else "any-slug"
     with pytest.raises(StaleIndexError, match="--full"):
@@ -138,6 +141,9 @@ def test_vote_breakdown_unknown_bill_returns_empty(indexed_db):
 
 
 def test_vote_breakdown_raises_stale_index_when_votes_empty(indexed_db):
+    # Simulate post-upgrade pre-`--full` state: schema rolled back below
+    # SCHEMA_VERSION. user_version is now the source of truth for staleness.
     indexed_db.execute("DELETE FROM votes")
+    indexed_db.execute("PRAGMA user_version = 1")
     with pytest.raises(StaleIndexError, match="--full"):
         vote_breakdown(indexed_db, bill_id=68628)

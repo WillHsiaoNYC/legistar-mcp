@@ -90,12 +90,17 @@ def test_get_voting_record_raises_stale_index_when_votes_empty(indexed_db):
 # vote_breakdown tests
 
 def test_vote_breakdown_returns_all_voters_for_bill(indexed_db):
-    """All vote rows for the fixture bill come back. The 57-row fixture
-    fits comfortably under the default limit=100.
+    """All vote rows for the fixture bill come back.
+
+    Computes expected from the votes table itself rather than hardcoding 57
+    so a fixture refresh doesn't break the test for a still-correct
+    implementation. The guard below catches the inverse failure mode — a
+    fixture that lost all vote rows would otherwise make this test vacuous.
     """
     expected = indexed_db.execute(
-        "SELECT COUNT(*) FROM votes WHERE bill_id = 68628"
+        "SELECT COUNT(*) FROM votes WHERE bill_id = ?", (68628,)
     ).fetchone()[0]
+    assert expected >= 1, "fixture must produce at least 1 vote row for MOO bill"
     results = vote_breakdown(indexed_db, bill_id=68628)
     assert len(results) == expected
 

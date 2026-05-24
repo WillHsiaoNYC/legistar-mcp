@@ -53,6 +53,33 @@ def index_bill_file(conn: Connection, json_path: Path, archive_root: Path) -> No
                 (b["ID"], slug, i),
             )
 
+    # Mirror History[].Votes[] into the votes table for voting-record queries.
+    # Clear stale vote rows for this bill (handles reindex of an amended bill).
+    conn.execute("DELETE FROM votes WHERE bill_id = ?", (b["ID"],))
+
+    for hist in b.get("History") or []:
+        record_id = hist.get("ID")
+        if record_id is None:
+            continue
+        event_id = hist.get("EventID")
+        date = hist.get("Date")
+        action = hist.get("Action")
+        passed = hist.get("PassedFlag")
+        for vote in hist.get("Votes") or []:
+            slug = vote.get("Slug")
+            if not slug:
+                continue  # no person mapping — skip
+            value = vote.get("Vote")
+            if not value:
+                continue
+            conn.execute(
+                "INSERT OR REPLACE INTO votes "
+                "(history_record_id, person_slug, bill_id, event_id, "
+                " vote_value, vote_date, action, passed_flag) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (record_id, slug, b["ID"], event_id, value, date, action, passed),
+            )
+
 
 def index_event_file(conn: Connection, json_path: Path, archive_root: Path) -> None:
     with open(json_path, encoding="utf-8") as f:

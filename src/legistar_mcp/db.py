@@ -12,6 +12,8 @@ SCHEMA_PATH = Path(__file__).parent / "index" / "schema.sql"
 #       (existing rows have NULL guid until rebuilt).
 #   2 — `event_items` table added for bill↔event linkage (Batch B). NULL for
 #       existing DBs until --full re-runs the event indexer.
+#   3 — `votes` table added for council voting records (Batch C). Empty for
+#       existing DBs until --full re-runs the bill indexer.
 SCHEMA_VERSION = 2
 
 
@@ -63,6 +65,26 @@ def _migrate(conn: sqlite3.Connection) -> None:
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_event_items_bill ON event_items(bill_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_event_items_event ON event_items(event_id)")
+    conn.commit()
+
+    # votes is new in SCHEMA_VERSION 3 (Batch C, tools expansion).
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS votes (
+            history_record_id INTEGER NOT NULL,
+            person_slug TEXT NOT NULL,
+            bill_id INTEGER NOT NULL,
+            event_id INTEGER,
+            vote_value TEXT NOT NULL,
+            vote_date TEXT,
+            action TEXT,
+            passed_flag INTEGER,
+            PRIMARY KEY (history_record_id, person_slug)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_votes_bill ON votes(bill_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_votes_event ON votes(event_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_votes_person ON votes(person_slug)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_votes_person_date ON votes(person_slug, vote_date)")
     conn.commit()
 
 

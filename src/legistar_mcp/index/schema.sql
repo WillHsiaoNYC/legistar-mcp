@@ -85,6 +85,22 @@ CREATE TABLE IF NOT EXISTS event_items (
 CREATE INDEX IF NOT EXISTS idx_event_items_bill ON event_items(bill_id);
 CREATE INDEX IF NOT EXISTS idx_event_items_event ON event_items(event_id);
 
+CREATE TABLE IF NOT EXISTS votes (
+    history_record_id INTEGER NOT NULL,        -- History[].ID — uniquely identifies the vote action
+    person_slug TEXT NOT NULL,
+    bill_id INTEGER NOT NULL,
+    event_id INTEGER,                          -- History[].EventID; may be null for filed-without-action
+    vote_value TEXT NOT NULL,                  -- 'Affirmative' | 'Negative' | 'Abstain' | 'Absent' | 'Excused' | 'Medical' | 'Parental' | etc.
+    vote_date TEXT,                            -- History[].Date
+    action TEXT,                               -- History[].Action e.g. "Approved by Committee"
+    passed_flag INTEGER,                       -- History[].PassedFlag (0/1)
+    PRIMARY KEY (history_record_id, person_slug)
+);
+CREATE INDEX IF NOT EXISTS idx_votes_bill ON votes(bill_id);
+CREATE INDEX IF NOT EXISTS idx_votes_event ON votes(event_id);
+CREATE INDEX IF NOT EXISTS idx_votes_person ON votes(person_slug);
+CREATE INDEX IF NOT EXISTS idx_votes_person_date ON votes(person_slug, vote_date);
+
 CREATE TABLE IF NOT EXISTS index_state (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

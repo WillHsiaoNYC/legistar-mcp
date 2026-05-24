@@ -66,3 +66,50 @@ def test_index_bill_replaces_fts_content_on_reindex(tmp_path, bills_dir):
     # Old title-only term no longer matches — proves the old FTS row was DELETEd
     # (not merely shadowed by an append).
     assert _title_hits(conn, "stability") == []
+
+
+def test_index_bill_populates_votes_for_history_with_roll_call(tmp_path, fixtures_root):
+    """Bills with History[].Votes[] entries get mirrored into votes table."""
+    from legistar_mcp.db import init_db
+    from legistar_mcp.index.bulk import build_all
+
+    conn = init_db(tmp_path / "t.db")
+    build_all(conn, archive_root=fixtures_root)
+    # The MOO fixture int_0153_2022.json has History[] with embedded Votes[].
+    # Count how many roll-call rows exist for that bill across all history records.
+    rows = conn.execute(
+        "SELECT COUNT(*) FROM votes WHERE bill_id = ?", (68628,)
+    ).fetchone()[0]
+    assert rows > 0, "MOO fixture must have at least 1 vote row"
+
+
+def test_index_bill_skips_votes_without_slug_or_value(tmp_path, fixtures_root):
+    """Indexer skips vote rows missing Slug or Vote; resulting votes rows have both."""
+    from legistar_mcp.db import init_db
+    from legistar_mcp.index.bulk import build_all
+
+    conn = init_db(tmp_path / "t.db")
+    build_all(conn, archive_root=fixtures_root)
+    rows = conn.execute(
+        "SELECT person_slug, vote_value FROM votes WHERE bill_id = ?", (68628,)
+    ).fetchall()
+    assert all(r["person_slug"] for r in rows)
+    assert all(r["vote_value"] for r in rows)
+
+
+def test_index_bill_votes_carry_history_metadata(tmp_path, fixtures_root):
+    """Vote rows have action, vote_date, history_record_id populated from History."""
+    from legistar_mcp.db import init_db
+    from legistar_mcp.index.bulk import build_all
+
+    conn = init_db(tmp_path / "t.db")
+    build_all(conn, archive_root=fixtures_root)
+    row = conn.execute(
+        "SELECT history_record_id, action, vote_date FROM votes "
+        "WHERE bill_id = ? LIMIT 1", (68628,)
+    ).fetchone()
+    assert row is not None
+    assert row["history_record_id"] is not None
+    # Action and vote_date should be non-null for roll-call records
+    assert row["action"] is not None
+    assert row["vote_date"] is not None

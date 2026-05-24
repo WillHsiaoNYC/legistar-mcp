@@ -1,4 +1,4 @@
-"""MCP stdio server wiring the 12 Legistar tools.
+"""MCP stdio server wiring the 14 Legistar tools.
 
 Reads `LEGISTAR_DB_PATH` from the environment at startup and fails fast if it
 is missing or doesn't exist. The archive root is read from the indexed DB
@@ -21,7 +21,9 @@ from .tools.bills import get_bill as _get_bill
 from .tools.bills import recent_bills as _recent_bills
 from .tools.bills import search_bills as _search_bills
 from .tools.committees import list_committees as _list_committees
+from .tools.events import get_bill_hearings as _get_bill_hearings
 from .tools.events import get_event as _get_event
+from .tools.events import get_event_bills as _get_event_bills
 from .tools.events import search_events as _search_events
 from .tools.events import upcoming_events as _upcoming_events
 from .tools.people import get_person as _get_person
@@ -45,7 +47,7 @@ def _load_env_db_path() -> Path:
 
 
 def make_server() -> FastMCP:
-    """Construct a FastMCP server with all 12 Legistar tools registered.
+    """Construct a FastMCP server with all 14 Legistar tools registered.
 
     Resolves the DB and archive_root eagerly so misconfiguration surfaces at
     startup, not on the first tool call.
@@ -201,6 +203,21 @@ def make_server() -> FastMCP:
     ) -> list[dict]:
         """Council members who have co-sponsored the most bills with a given person (by slug). Returns slug, full_name, and overlap_count, sorted by overlap_count DESC."""
         return _co_sponsors(conn, slug=slug, min_overlap=min_overlap, limit=limit)
+
+    @server.tool()
+    def get_bill_hearings(
+        file: str | None = None,
+        id: int | None = None,
+        only_upcoming: bool = False,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Events where a given bill was on the agenda. Supply either bill `file` (e.g., 'Int 0153-2022') or numeric `id`. Set `only_upcoming=True` to filter to future events."""
+        return _get_bill_hearings(conn, file=file, id=id, only_upcoming=only_upcoming, limit=limit)
+
+    @server.tool()
+    def get_event_bills(event_id: int) -> list[dict]:
+        """Bills on the agenda for a specific event. Returns rows sorted by item_sequence ascending."""
+        return _get_event_bills(conn, event_id=event_id)
 
     return server
 

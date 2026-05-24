@@ -12,7 +12,7 @@ SCHEMA_PATH = Path(__file__).parent / "index" / "schema.sql"
 #       (existing rows have NULL guid until rebuilt).
 #   2 — `event_items` table added for bill↔event linkage (Batch B). NULL for
 #       existing DBs until --full re-runs the event indexer.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def open_db(db_path: Path) -> sqlite3.Connection:

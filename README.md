@@ -154,6 +154,8 @@ If the tools don't appear at all, jump to [Troubleshooting](#troubleshooting).
 | `recent_bills` | Bills introduced within the last `days` days. Convenience wrapper; for agency-scoped searches use `search_bills(agency=...)`. |
 | `upcoming_events` | Events scheduled in the next `days` days. Optional `committee` body_name filter. |
 | `co_sponsors` | Council members who have co-sponsored the most bills with a given person (`slug`). Returns slug, full_name, and overlap_count. |
+| `get_bill_hearings` | Events where a given bill was on the agenda (lookup by `file` like `Int 0153-2022` or numeric `id`). Set `only_upcoming=True` to filter to future events. |
+| `get_event_bills` | Bills on the agenda for a specific event, sorted by agenda sequence. |
 
 ## Example: bills involving the Mayor's Office of Operations
 

@@ -233,25 +233,14 @@ def recent_bills(
     limit: int = 20,
 ) -> list[dict]:
     """Bills introduced within the last `days`. Convenience wrapper — does
-    NOT take an `agency` filter; use search_bills(agency=...) for that.
-
-    Window is [today - days, today]. Future-dated bills (rare; usually data
-    entry artifacts) are excluded so that days=1 means "today only", not
-    "anything from yesterday onward".
-    """
-    today = _dt.date.today()
-    cutoff = (today - _dt.timedelta(days=days)).isoformat()
-    # intro_date is stored as ISO datetime like "2024-02-08T00:00:00Z";
-    # an exclusive upper of (today + 1 day) lets same-day rows match via
-    # lexicographic compare since "YYYY-MM-DDT..." < "YYYY-MM-DD+1".
-    upper = (today + _dt.timedelta(days=1)).isoformat()
+    NOT take an `agency` filter; use search_bills(agency=...) for that."""
+    cutoff = (_dt.date.today() - _dt.timedelta(days=days)).isoformat()
     sql = (
         "SELECT DISTINCT bills.id, bills.guid, bills.file, bills.title, "
         "bills.summary, bills.status_name, bills.type_name, bills.body_name, "
-        "bills.intro_date FROM bills WHERE bills.intro_date >= ? "
-        "AND bills.intro_date < ?"
+        "bills.intro_date FROM bills WHERE bills.intro_date >= ?"
     )
-    params: list = [cutoff, upper]
+    params: list = [cutoff]
     if status:
         sql += " AND bills.status_name = ?"
         params.append(status)

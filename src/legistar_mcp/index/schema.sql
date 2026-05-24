@@ -74,8 +74,13 @@ CREATE TABLE IF NOT EXISTS events_fts_map (
 );
 CREATE INDEX IF NOT EXISTS idx_events_fts_map_event ON events_fts_map(event_id);
 
+-- event_items: bill <-> event linkage. item_id is the SOURCE-PROVIDED Items[].ID,
+-- which P1 verified is globally unique across 1336 sampled items. If Legistar
+-- ever reuses an item_id across two events, the indexer's INSERT OR REPLACE
+-- would silently relocate the row to the second event (per-event DELETE only
+-- clears the current event's mirrors).
 CREATE TABLE IF NOT EXISTS event_items (
-    item_id INTEGER PRIMARY KEY,               -- Items[].ID from source JSON; globally unique
+    item_id INTEGER PRIMARY KEY,               -- Items[].ID from source JSON; globally unique (P1-verified)
     event_id INTEGER NOT NULL REFERENCES events(id),
     bill_id INTEGER NOT NULL,                  -- bills.id; may be absent if bill not indexed
     item_title TEXT,
@@ -85,8 +90,15 @@ CREATE TABLE IF NOT EXISTS event_items (
 CREATE INDEX IF NOT EXISTS idx_event_items_bill ON event_items(bill_id);
 CREATE INDEX IF NOT EXISTS idx_event_items_event ON event_items(event_id);
 
+-- votes: per-(history-record, person) roll-call rows. PK is (history_record_id,
+-- person_slug). P2 verified history_record_id is unique across 659 sampled
+-- records. If Legistar ever cross-references the same History.ID under two
+-- MatterIDs, the indexer's INSERT OR REPLACE would silently move the row's
+-- bill_id to whichever bill was indexed second (per-bill DELETE only clears
+-- the current bill's rows). Detection would require a post-indexing audit
+-- that the existing PK is currently safe to rely on.
 CREATE TABLE IF NOT EXISTS votes (
-    history_record_id INTEGER NOT NULL,        -- History[].ID — uniquely identifies the vote action
+    history_record_id INTEGER NOT NULL,        -- History[].ID — globally unique vote action (P2-verified)
     person_slug TEXT NOT NULL,
     bill_id INTEGER NOT NULL,
     event_id INTEGER,                          -- History[].EventID; may be null for filed-without-action

@@ -63,3 +63,57 @@ def test_upcoming_events_empty_when_no_future(indexed_db):
 def test_upcoming_events_have_legistar_url(indexed_db):
     results = upcoming_events(indexed_db, days=30)
     assert results and "legistar_url" in results[0]
+
+
+def test_get_bill_hearings_returns_event_for_known_bill(indexed_db):
+    """The fixture event has 3 bill-bearing items; querying by Int 0153-2022 returns the event."""
+    from legistar_mcp.tools.events import get_bill_hearings
+    results = get_bill_hearings(indexed_db, file="Int 0153-2022")
+    assert any(r["id"] == 21015 for r in results)
+    hit = next(r for r in results if r["id"] == 21015)
+    assert hit["action_name"] == "Hearing Held by Committee"
+    assert hit["item_title"].startswith("Int 0153-2022")
+    assert "legistar_url" in hit
+
+
+def test_get_bill_hearings_unknown_file_returns_empty(indexed_db):
+    from legistar_mcp.tools.events import get_bill_hearings
+    assert get_bill_hearings(indexed_db, file="Int 9999-9999") == []
+
+
+def test_get_bill_hearings_requires_file_or_id(indexed_db):
+    from legistar_mcp.tools.events import get_bill_hearings
+    with pytest.raises(ValueError):
+        get_bill_hearings(indexed_db)
+
+
+def test_get_bill_hearings_raises_stale_index_when_event_items_empty(indexed_db):
+    from legistar_mcp.tools.events import get_bill_hearings
+    from legistar_mcp._db_utils import StaleIndexError
+    indexed_db.execute("DELETE FROM event_items")
+    with pytest.raises(StaleIndexError, match="--full"):
+        get_bill_hearings(indexed_db, file="Int 0153-2022")
+
+
+def test_get_event_bills_returns_bills_for_known_event(indexed_db):
+    from legistar_mcp.tools.events import get_event_bills
+    results = get_event_bills(indexed_db, event_id=21015)
+    # Fixture event has 3 bill-bearing items
+    assert len(results) == 3
+    files = {r["file"] for r in results}
+    assert "Int 0153-2022" in files
+    assert "Int 0001-2024" in files
+    assert "Int 0938-2023" in files
+    assert all("legistar_url" in r for r in results)
+
+
+def test_get_event_bills_unknown_event_returns_empty(indexed_db):
+    from legistar_mcp.tools.events import get_event_bills
+    assert get_event_bills(indexed_db, event_id=99999999) == []
+
+
+def test_get_event_bills_sorted_by_sequence_asc(indexed_db):
+    from legistar_mcp.tools.events import get_event_bills
+    results = get_event_bills(indexed_db, event_id=21015)
+    sequences = [r["item_sequence"] for r in results]
+    assert sequences == sorted(sequences)

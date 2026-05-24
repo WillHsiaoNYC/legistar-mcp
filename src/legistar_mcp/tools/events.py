@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from sqlite3 import Connection
 
+from .._db_utils import _check_table_populated
 from ..agency import resolve_to_fts_query
 from ._snippet import _archive_root, _build_snippet, _extract_phrases, _get_agencies
 
@@ -150,4 +151,62 @@ def upcoming_events(
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     for r in rows:
         r["legistar_url"] = _legistar_url(r.get("id"), r.pop("guid", None))
+    return rows
+
+
+def get_bill_hearings(
+    conn: Connection,
+    file: str | None = None,
+    id: int | None = None,
+    only_upcoming: bool = False,
+    limit: int = 20,
+) -> list[dict]:
+    """Events where the given bill was on the agenda. Raises StaleIndexError
+    if the event_items table is empty post-upgrade (run `--full` to fix)."""
+    _check_table_populated(conn, "event_items", "events")
+
+    if file:
+        row = conn.execute("SELECT id FROM bills WHERE file = ?", (file,)).fetchone()
+        bill_id = row["id"] if row else None
+    elif id is not None:
+        bill_id = id
+    else:
+        raise ValueError("Must supply either `file` or `id`")
+    if bill_id is None:
+        return []
+
+    sql = (
+        "SELECT events.id, events.guid, events.body_name, events.date, "
+        "events.location, ei.item_title, ei.item_sequence, ei.action_name "
+        "FROM event_items ei JOIN events ON ei.event_id = events.id "
+        "WHERE ei.bill_id = ?"
+    )
+    params: list = [bill_id]
+    if only_upcoming:
+        sql += " AND events.date >= ?"
+        params.append(_dt.date.today().isoformat())
+    sql += " ORDER BY events.date DESC, ei.item_sequence ASC LIMIT ?"
+    params.append(limit)
+    rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    for r in rows:
+        r["legistar_url"] = _legistar_url(r.get("id"), r.pop("guid", None))
+    return rows
+
+
+def get_event_bills(conn: Connection, event_id: int) -> list[dict]:
+    """Bills on the agenda for a specific event. Raises StaleIndexError if
+    the event_items table is empty post-upgrade."""
+    _check_table_populated(conn, "event_items", "events")
+
+    from .bills import _legistar_url as _legistar_url_bill
+
+    sql = (
+        "SELECT bills.id, bills.guid, bills.file, bills.title, bills.status_name, "
+        "ei.item_title, ei.item_sequence, ei.action_name "
+        "FROM event_items ei JOIN bills ON ei.bill_id = bills.id "
+        "WHERE ei.event_id = ? ORDER BY ei.item_sequence ASC"
+    )
+    rows = [dict(r) for r in conn.execute(sql, (event_id,)).fetchall()]
+    for r in rows:
+        r["legistar_url"] = _legistar_url_bill(r.get("id"), r.pop("guid", None))
     return rows

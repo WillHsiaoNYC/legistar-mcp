@@ -9,12 +9,22 @@ env var between indexing and serving.
 
 from __future__ import annotations
 
+import functools
 import os
+import threading
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
 from .db import open_db
+
+# Module-level lock around the shared sqlite Connection. sqlite3 forbids
+# concurrent use of one Connection across threads even with
+# check_same_thread=False; FastMCP may dispatch tools from a worker thread.
+# Wrapping each tool body in `with _db_lock` serializes access without forcing
+# every caller to reopen the DB. Uncontended in the current single-thread
+# stdio transport, so the overhead is a no-op atomic.
+_db_lock = threading.Lock()
 from .tools._snippet import _archive_root
 from .tools.bills import aggregate_bills as _aggregate_bills
 from .tools.bills import get_bill as _get_bill
@@ -72,7 +82,20 @@ def make_server() -> FastMCP:
 
     server = FastMCP("legistar-mcp")
 
+    def _db_locked(fn):
+        """Serialize tool bodies on the shared sqlite Connection.
+
+        Applied below each `@server.tool()` so FastMCP still sees the original
+        signature (preserved via functools.wraps) for JSON-schema generation.
+        """
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            with _db_lock:
+                return fn(*args, **kwargs)
+        return wrapper
+
     @server.tool()
+    @_db_locked
     def search_bills(
         query: str | None = None,
         agency: str | None = None,
@@ -99,11 +122,13 @@ def make_server() -> FastMCP:
         )
 
     @server.tool()
+    @_db_locked
     def get_bill(file: str | None = None, id: int | None = None) -> dict | None:
         """Fetch a single bill's full record by file number (e.g., 'Int 1234-2024') or numeric ID."""
         return _get_bill(conn, archive_root, file=file, id=id)
 
     @server.tool()
+    @_db_locked
     def search_people(
         name: str | None = None,
         active_only: bool = False,
@@ -113,11 +138,13 @@ def make_server() -> FastMCP:
         return _search_people(conn, name=name, active_only=active_only, limit=limit)
 
     @server.tool()
+    @_db_locked
     def get_person(slug: str) -> dict | None:
         """Fetch a Council member's profile by slug."""
         return _get_person(conn, archive_root, slug)
 
     @server.tool()
+    @_db_locked
     def search_events(
         query: str | None = None,
         agency: str | None = None,
@@ -138,16 +165,19 @@ def make_server() -> FastMCP:
         )
 
     @server.tool()
+    @_db_locked
     def get_event(id: int) -> dict | None:
         """Fetch a single event's full record by numeric ID."""
         return _get_event(conn, archive_root, id)
 
     @server.tool()
+    @_db_locked
     def list_committees() -> list[dict]:
         """List all committees with bill and event counts."""
         return _list_committees(conn)
 
     @server.tool()
+    @_db_locked
     def aggregate_bills(
         group_by: list[str],
         year_from: int | None = None,
@@ -174,11 +204,13 @@ def make_server() -> FastMCP:
         )
 
     @server.tool()
+    @_db_locked
     def list_vocabulary(field: str) -> list[str]:
         """Return distinct non-null values for a known DB column (status_name, type_name, body_name, event_committee). Helps you discover the exact spelling of statuses, types, and committees."""
         return _list_vocabulary(conn, field=field)
 
     @server.tool()
+    @_db_locked
     def recent_bills(
         days: int = 7,
         status: str | None = None,
@@ -189,6 +221,7 @@ def make_server() -> FastMCP:
         return _recent_bills(conn, days=days, status=status, type=type, limit=limit)
 
     @server.tool()
+    @_db_locked
     def upcoming_events(
         days: int = 14,
         committee: str | None = None,
@@ -198,6 +231,7 @@ def make_server() -> FastMCP:
         return _upcoming_events(conn, days=days, committee=committee, limit=limit)
 
     @server.tool()
+    @_db_locked
     def co_sponsors(
         slug: str,
         min_overlap: int = 5,
@@ -207,6 +241,7 @@ def make_server() -> FastMCP:
         return _co_sponsors(conn, slug=slug, min_overlap=min_overlap, limit=limit)
 
     @server.tool()
+    @_db_locked
     def get_bill_hearings(
         file: str | None = None,
         id: int | None = None,
@@ -217,11 +252,13 @@ def make_server() -> FastMCP:
         return _get_bill_hearings(conn, file=file, id=id, only_upcoming=only_upcoming, limit=limit)
 
     @server.tool()
+    @_db_locked
     def get_event_bills(event_id: int) -> list[dict]:
         """Bills on the agenda for a specific event. Returns rows sorted by item_sequence ascending."""
         return _get_event_bills(conn, event_id=event_id)
 
     @server.tool()
+    @_db_locked
     def get_voting_record(
         slug: str,
         year_from: int | None = None,
@@ -240,6 +277,7 @@ def make_server() -> FastMCP:
         )
 
     @server.tool()
+    @_db_locked
     def vote_breakdown(bill_id: int, limit: int = 100) -> list[dict]:
         """Every council member's vote on a specific bill, sorted most-recent first. NULL-date rows (rare) are placed last. Returns person_slug, full_name, vote_value per row."""
         return _vote_breakdown(conn, bill_id=bill_id, limit=limit)

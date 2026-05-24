@@ -18,7 +18,12 @@ SCHEMA_VERSION = 3
 
 
 def open_db(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
+    # check_same_thread=False lets a single Connection be used from any thread
+    # — required because FastMCP can dispatch tools off the main thread. The
+    # server.py module guards every tool call with a module-level lock so the
+    # connection is still accessed serially (sqlite3 itself is not safe under
+    # concurrent use of one Connection).
+    conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")

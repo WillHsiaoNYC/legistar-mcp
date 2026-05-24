@@ -237,8 +237,14 @@ def recent_bills(
     type: str | None = None,
     limit: int = 20,
 ) -> list[dict]:
-    """Bills introduced within the last `days`. Convenience wrapper — does
-    NOT take an `agency` filter; use search_bills(agency=...) for that."""
+    """Bills introduced within the last `days` days. Convenience wrapper — does
+    NOT take an `agency` filter; use search_bills(agency=...) for that.
+
+    Note: there is no upper bound on intro_date. A bill with a future or
+    typo'd IntroDate will be returned and will sort to the top of results
+    (ORDER BY intro_date DESC). Use search_bills(year_to=...) for a
+    precise bounded window.
+    """
     cutoff = (_dt.date.today() - _dt.timedelta(days=days)).isoformat()
     sql = (
         "SELECT DISTINCT bills.id, bills.guid, bills.file, bills.title, "

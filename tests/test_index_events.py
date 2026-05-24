@@ -1,3 +1,5 @@
+import pytest
+
 from legistar_mcp.db import init_db
 from legistar_mcp.index.build import index_event_file
 
@@ -55,6 +57,73 @@ def test_index_event_skips_items_without_matter_id(tmp_path, fixtures_root):
     rows = conn.execute("SELECT bill_id FROM event_items").fetchall()
     assert rows  # not vacuous — we have at least one bill-bearing item
     assert all(r["bill_id"] is not None for r in rows)
+
+
+def test_index_event_rolls_back_on_mid_indexing_error(tmp_path):
+    """If a downstream INSERT raises mid-file, the events row must not
+    survive. The per-file `with conn:` wrapper guarantees rollback.
+    """
+    import json
+    from legistar_mcp.db import init_db
+    from legistar_mcp.index.build import index_event_file
+
+    conn = init_db(tmp_path / "t.db")
+    # Synthetic event: legitimately indexed, then we'll force a failure
+    # by smuggling an Items[] entry whose MatterID is a string of more
+    # than the event_items.bill_id TEXT/INTEGER affinity could accept...
+    # Easier route: monkeypatch conn.execute to raise on a specific call.
+    event = {
+        "ID": 77777,
+        "GUID": "EVT-GUID",
+        "BodyID": 1,
+        "BodyName": "Committee Z",
+        "Date": "2024-08-15T13:30:00-04:00",
+        "Location": "Loc",
+        "LastModified": "2024-08-10T00:00:00Z",
+        "Items": [
+            {
+                "ID": 800001,
+                "MatterID": 1234,
+                "Title": "good item",
+                "AgendaSequence": 1,
+            },
+        ],
+    }
+    archive_root = tmp_path / "archive"
+    events_dir = archive_root / "events"
+    events_dir.mkdir(parents=True)
+    event_path = events_dir / "synthetic.json"
+    event_path.write_text(json.dumps(event), encoding="utf-8")
+
+    # Wrap conn in a proxy that raises on the event_items insert. By the time
+    # that fires we've already inserted the events row, FTS rows, and one
+    # event_items row — a perfect rollback target.
+    class FlakyConn:
+        def __init__(self, real):
+            self._real = real
+
+        def execute(self, sql, *args, **kwargs):
+            if "INSERT OR REPLACE INTO event_items" in sql:
+                raise RuntimeError("simulated mid-file failure")
+            return self._real.execute(sql, *args, **kwargs)
+
+        def __enter__(self):
+            return self._real.__enter__()
+
+        def __exit__(self, *exc):
+            return self._real.__exit__(*exc)
+
+    flaky = FlakyConn(conn)
+    with pytest.raises(RuntimeError, match="simulated"):
+        index_event_file(flaky, event_path, archive_root=archive_root)
+
+    # The event row should NOT exist; the partial write was rolled back.
+    row = conn.execute("SELECT id FROM events WHERE id = 77777").fetchone()
+    assert row is None, "events row leaked despite rollback"
+    fts_rows = conn.execute(
+        "SELECT 1 FROM events_fts_map WHERE event_id = 77777"
+    ).fetchall()
+    assert not fts_rows, "events_fts_map row leaked despite rollback"
 
 
 def test_index_event_skips_item_with_matter_id_but_missing_id(tmp_path):

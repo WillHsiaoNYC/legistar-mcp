@@ -18,6 +18,16 @@ SCHEMA_VERSION = 3
 
 
 def open_db(db_path: Path) -> sqlite3.Connection:
+    # vote_breakdown's ORDER BY uses `NULLS LAST`, which sqlite3 added in 3.30
+    # (Oct 2019). Stripped-down deployment environments occasionally ship an
+    # older libsqlite3; surface that here at open time rather than letting one
+    # tool fail mysteriously later. Modern CPython builds bundle 3.40+.
+    if sqlite3.sqlite_version_info < (3, 30):
+        raise RuntimeError(
+            f"SQLite >= 3.30 required (vote_breakdown uses NULLS LAST). "
+            f"Found {sqlite3.sqlite_version}. Upgrade Python or rebuild "
+            f"with a newer libsqlite3."
+        )
     # check_same_thread=False lets a single Connection be used from any thread
     # — required because FastMCP can dispatch tools off the main thread. The
     # server.py module guards every tool call with a module-level lock so the

@@ -1,3 +1,4 @@
+import datetime as _dt
 import json
 from pathlib import Path
 from sqlite3 import Connection
@@ -222,3 +223,44 @@ def aggregate_bills(
     params.append(limit)
 
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def recent_bills(
+    conn: Connection,
+    days: int = 7,
+    status: str | None = None,
+    type: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """Bills introduced within the last `days`. Convenience wrapper — does
+    NOT take an `agency` filter; use search_bills(agency=...) for that.
+
+    Window is [today - days, today]. Future-dated bills (rare; usually data
+    entry artifacts) are excluded so that days=1 means "today only", not
+    "anything from yesterday onward".
+    """
+    today = _dt.date.today()
+    cutoff = (today - _dt.timedelta(days=days)).isoformat()
+    # intro_date is stored as ISO datetime like "2024-02-08T00:00:00Z";
+    # an exclusive upper of (today + 1 day) lets same-day rows match via
+    # lexicographic compare since "YYYY-MM-DDT..." < "YYYY-MM-DD+1".
+    upper = (today + _dt.timedelta(days=1)).isoformat()
+    sql = (
+        "SELECT DISTINCT bills.id, bills.guid, bills.file, bills.title, "
+        "bills.summary, bills.status_name, bills.type_name, bills.body_name, "
+        "bills.intro_date FROM bills WHERE bills.intro_date >= ? "
+        "AND bills.intro_date < ?"
+    )
+    params: list = [cutoff, upper]
+    if status:
+        sql += " AND bills.status_name = ?"
+        params.append(status)
+    if type:
+        sql += " AND bills.type_name = ?"
+        params.append(type)
+    sql += " ORDER BY bills.intro_date DESC LIMIT ?"
+    params.append(limit)
+    rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    for r in rows:
+        r["legistar_url"] = _legistar_url(r.get("id"), r.pop("guid", None))
+    return rows

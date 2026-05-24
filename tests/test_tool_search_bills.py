@@ -1,8 +1,9 @@
 import pytest
+from freezegun import freeze_time
 
 from legistar_mcp.db import init_db
 from legistar_mcp.index.bulk import build_all
-from legistar_mcp.tools.bills import search_bills
+from legistar_mcp.tools.bills import recent_bills, search_bills
 
 
 @pytest.fixture
@@ -56,3 +57,36 @@ def test_agency_query_returns_snippets_with_role_context(indexed_db):
     assert any(
         w in joined for w in ("consultation", "report", "submit", "established", "shall")
     )
+
+
+@freeze_time("2024-04-01")
+def test_recent_bills_within_window(indexed_db):
+    results = recent_bills(indexed_db, days=60, limit=10)
+    assert any("0001-2024" in r["file"] for r in results)
+
+
+@freeze_time("2024-04-01")
+def test_recent_bills_empty_window(indexed_db):
+    assert recent_bills(indexed_db, days=1) == []
+
+
+@freeze_time("2024-04-01")
+def test_recent_bills_have_legistar_url(indexed_db):
+    results = recent_bills(indexed_db, days=60)
+    assert results and "legistar_url" in results[0]
+
+
+@freeze_time("2024-04-01")
+def test_recent_bills_status_filter_passes_through(indexed_db):
+    enacted = recent_bills(indexed_db, days=60, status="Enacted")
+    for r in enacted:
+        assert r["status_name"] == "Enacted"
+    bogus = recent_bills(indexed_db, days=60, status="Nonexistent Status")
+    assert bogus == []
+
+
+@freeze_time("2024-04-01")
+def test_recent_bills_type_filter_passes_through(indexed_db):
+    intros = recent_bills(indexed_db, days=60, type="Introduction")
+    for r in intros:
+        assert r["type_name"] == "Introduction"

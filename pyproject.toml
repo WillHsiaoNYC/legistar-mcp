@@ -20,6 +20,7 @@ build-backend = "hatchling.build"
 dev = [
     "pytest>=8.0",
     "ruff>=0.5",
+    "freezegun>=1.5",
 ]
 
 [tool.ruff]

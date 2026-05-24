@@ -13,8 +13,19 @@ import functools
 import os
 import threading
 from pathlib import Path
+from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
+
+# MCP-exposed enum constraints — keep in sync with tools/vocab.py
+# `_ALLOWED_FIELDS` and tools/bills.py `aggregate_bills` group_by validation.
+# Surfacing these as Literal lets FastMCP's JSON-schema generator publish the
+# enum to the agent, so invalid values fail fast at the protocol layer
+# instead of bubbling up as runtime ValueError from the tool body.
+VocabField = Literal["status_name", "type_name", "body_name", "event_committee"]
+GroupByDim = Literal[
+    "status_name", "type_name", "body_name", "sponsor_slug", "intro_year"
+]
 
 from .db import open_db
 
@@ -179,7 +190,7 @@ def make_server() -> FastMCP:
     @server.tool()
     @_db_locked
     def aggregate_bills(
-        group_by: list[str],
+        group_by: list[GroupByDim],
         year_from: int | None = None,
         year_to: int | None = None,
         status: str | None = None,
@@ -205,7 +216,7 @@ def make_server() -> FastMCP:
 
     @server.tool()
     @_db_locked
-    def list_vocabulary(field: str) -> list[str]:
+    def list_vocabulary(field: VocabField) -> list[str]:
         """Return distinct non-null values for a known DB column (status_name, type_name, body_name, event_committee). Helps you discover the exact spelling of statuses, types, and committees."""
         return _list_vocabulary(conn, field=field)
 

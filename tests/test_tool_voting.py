@@ -87,9 +87,41 @@ def test_get_voting_record_raises_stale_index_when_votes_empty(indexed_db):
 # vote_breakdown tests
 
 def test_vote_breakdown_returns_all_voters_for_bill(indexed_db):
-    """MOO fixture has 57 vote rows for bill 68628."""
+    """All vote rows for the fixture bill come back. The 57-row fixture
+    fits comfortably under the default limit=100.
+    """
+    expected = indexed_db.execute(
+        "SELECT COUNT(*) FROM votes WHERE bill_id = 68628"
+    ).fetchone()[0]
     results = vote_breakdown(indexed_db, bill_id=68628)
-    assert len(results) == 57
+    assert len(results) == expected
+
+
+def test_vote_breakdown_respects_limit(indexed_db):
+    results = vote_breakdown(indexed_db, bill_id=68628, limit=5)
+    assert len(results) <= 5
+
+
+def test_vote_breakdown_places_null_vote_date_last(indexed_db):
+    """A vote row with NULL vote_date must appear after dated rows even
+    under DESC vote_date ordering (SQLite's default would put NULL first).
+    """
+    indexed_db.execute(
+        "INSERT INTO votes "
+        "(history_record_id, person_slug, bill_id, event_id, vote_value, "
+        " vote_date, action, passed_flag) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (888888, "null-date-voter", 68628, None, "Affirmative", None, "Filed", 1),
+    )
+    indexed_db.commit()
+    results = vote_breakdown(indexed_db, bill_id=68628, limit=200)
+    # Find the null-date row's position.
+    null_idx = next(
+        i for i, r in enumerate(results) if r["person_slug"] == "null-date-voter"
+    )
+    # No dated row appears AFTER the null row.
+    for r in results[null_idx + 1:]:
+        assert r["vote_date"] is None
 
 
 def test_vote_breakdown_includes_vote_value(indexed_db):

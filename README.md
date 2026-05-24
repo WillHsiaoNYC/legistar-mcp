@@ -157,7 +157,7 @@ If the tools don't appear at all, jump to [Troubleshooting](#troubleshooting).
 | `get_bill_hearings` | Events where a given bill was on the agenda (lookup by `file` like `Int 0153-2022` or numeric `id`). Set `only_upcoming=True` to filter to future events. |
 | `get_event_bills` | Bills on the agenda for a specific event, sorted by agenda sequence. |
 | `get_voting_record` | Every vote a council member (`slug`) has cast — filter by `year_from`/`year_to` and `vote_value` (e.g., 'Affirmative', 'Negative', 'Absent'). |
-| `vote_breakdown` | Every council member's vote on a specific bill (`bill_id`). |
+| `vote_breakdown` | Every council member's vote on a specific bill (`bill_id`); sorted most-recent first with NULL-date rows last; bound result with `limit` (default 100). |
 
 ## Example: bills involving the Mayor's Office of Operations
 

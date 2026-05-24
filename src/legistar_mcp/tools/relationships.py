@@ -59,22 +59,31 @@ def get_voting_record(
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
-def vote_breakdown(conn: Connection, bill_id: int) -> list[dict]:
+def vote_breakdown(conn: Connection, bill_id: int, limit: int = 100) -> list[dict]:
     """Every council member's vote on a specific bill, across all history records.
+
+    Returns rows with: person_slug, full_name (NULL if no people row indexed),
+    vote_value, vote_date, event_id, action, passed_flag.
 
     Rows with NULL `event_id` are unusual but legal — they represent filing
     actions or other history entries that don't reference a specific event.
-    Returned as-is so the agent can reason about them.
+    Rows with NULL vote_date (rare history entries) are placed at the END of
+    the result rather than the top: SQLite's default DESC ordering puts NULLs
+    first, which is the opposite of what callers expect for "most-recent first".
 
     Raises StaleIndexError if the votes table is empty post-upgrade.
     """
     _check_table_populated(conn, "votes", "bills")
 
+    # `v.vote_date IS NULL` is 0 for not-null and 1 for null, so adding it as
+    # the FIRST ORDER BY key pushes null-dated rows to the end. Then the
+    # secondary `v.vote_date DESC` orders the not-null rows newest-first.
     sql = (
         "SELECT v.person_slug, p.full_name, v.vote_value, v.vote_date, "
         "       v.event_id, v.action, v.passed_flag "
         "FROM votes v LEFT JOIN people p ON v.person_slug = p.slug "
         "WHERE v.bill_id = ? "
-        "ORDER BY v.vote_date DESC, p.full_name ASC NULLS LAST"
+        "ORDER BY v.vote_date IS NULL, v.vote_date DESC, p.full_name ASC NULLS LAST "
+        "LIMIT ?"
     )
-    return [dict(r) for r in conn.execute(sql, (bill_id,)).fetchall()]
+    return [dict(r) for r in conn.execute(sql, (bill_id, limit)).fetchall()]

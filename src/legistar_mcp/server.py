@@ -240,9 +240,9 @@ def make_server() -> FastMCP:
         )
 
     @server.tool()
-    def vote_breakdown(bill_id: int) -> list[dict]:
-        """Every council member's vote on a specific bill, across all history records. Returns person_slug, full_name, vote_value per row."""
-        return _vote_breakdown(conn, bill_id=bill_id)
+    def vote_breakdown(bill_id: int, limit: int = 100) -> list[dict]:
+        """Every council member's vote on a specific bill, sorted most-recent first. NULL-date rows (rare) are placed last. Returns person_slug, full_name, vote_value per row."""
+        return _vote_breakdown(conn, bill_id=bill_id, limit=limit)
 
     return server
 

@@ -29,3 +29,17 @@ def test_unknown_agency_falls_back_to_phrase_query():
     a = load_agencies(YAML_PATH)
     q = resolve_to_fts_query("Department of Made-Up Things", a)
     assert '"department of made-up things"' in q.lower()
+
+
+def test_dcwp_resolves_via_current_and_historical_names():
+    # DCWP was renamed from "Department of Consumer Affairs" (DCA) in 2020.
+    # Both names must resolve to the same canonical agency so that queries
+    # over the full bill archive (pre- and post-2020) work uniformly.
+    a = load_agencies(YAML_PATH)
+    canonical = "department of consumer and worker protection"
+
+    q_new = resolve_to_fts_query("DCWP", a)
+    assert canonical in q_new.lower()
+
+    q_old = resolve_to_fts_query("Department of Consumer Affairs", a)
+    assert canonical in q_old.lower()

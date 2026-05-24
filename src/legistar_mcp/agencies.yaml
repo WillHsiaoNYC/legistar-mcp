@@ -1,32 +1,407 @@
-# legistar-mcp/agencies.yaml
+# Hand-curated dictionary of NYC agencies for the agency resolver.
+# Source: NYC government internal agency table (2026-05-23).
+# Slug convention: lowercase abbreviation when well-known and non-ambiguous,
+# else kebab-case. Aliases must be phrases that plausibly appear in bill
+# text — internal acronyms that aren't cited in legislation (e.g., bare
+# 3-char codes) are intentionally omitted to avoid FTS false positives.
+
+acs:
+  display: "Administration for Children's Services"
+  aliases: ["ACS", "Administration for Children's Services"]
+
+bic:
+  display: "Business Integrity Commission"
+  aliases: ["BIC", "Business Integrity Commission"]
+
+boe:
+  display: "Board of Elections"
+  aliases: ["BOE", "Board of Elections"]
+
+cau:
+  display: "Community Affairs Unit"
+  aliases: ["Community Affairs Unit"]
+
+ccrb:
+  display: "Civilian Complaint Review Board"
+  aliases: ["CCRB", "Civilian Complaint Review Board"]
+
+nyc-opportunity:
+  display: "Mayor's Office for Economic Opportunity"
+  aliases: ["NYC Opportunity", "Mayor's Office for Economic Opportunity"]
+
+counsel-to-the-mayor:
+  display: "Counsel to the Mayor"
+  aliases: ["Counsel to the Mayor"]
+
+cuny:
+  display: "City University of New York"
+  aliases: ["CUNY", "City University of New York"]
+
+dcwp:
+  # Renamed from "Department of Consumer Affairs" (DCA) in 2020. Bills before
+  # 2020 cite DCA; after, DCWP. Merged into one entry so a query for either
+  # name returns the agency's full history.
+  display: "Department of Consumer and Worker Protection"
+  aliases:
+    - "DCWP"
+    - "Department of Consumer and Worker Protection"
+    - "DCA"
+    - "Department of Consumer Affairs"
+
+dcas:
+  display: "Department of Citywide Administrative Services"
+  aliases: ["DCAS", "Department of Citywide Administrative Services"]
+
+dcla:
+  display: "Department of Cultural Affairs"
+  aliases: ["DCLA", "Department of Cultural Affairs"]
+
+dcp:
+  display: "Department of City Planning"
+  aliases: ["DCP", "Department of City Planning"]
+
+ddc:
+  display: "Department of Design and Construction"
+  aliases: ["DDC", "Department of Design and Construction"]
+
+dep:
+  display: "Department of Environmental Protection"
+  aliases: ["DEP", "Department of Environmental Protection"]
+
+dfta:
+  display: "Department for the Aging"
+  aliases: ["DFTA", "Department for the Aging"]
+
+dhs:
+  display: "Department of Homeless Services"
+  aliases: ["DHS", "Department of Homeless Services"]
+
+dob:
+  display: "Department of Buildings"
+  aliases: ["DOB", "Department of Buildings"]
+
+doc:
+  display: "Department of Correction"
+  aliases: ["DOC", "Department of Correction"]
+
+doe:
+  display: "Department of Education"
+  aliases: ["DOE", "Department of Education"]
+
+dof:
+  display: "Department of Finance"
+  aliases: ["DOF", "Department of Finance"]
+
+dohmh:
+  display: "Department of Health and Mental Hygiene"
+  aliases: ["DOHMH", "Department of Health and Mental Hygiene"]
+
+doi:
+  display: "Department of Investigation"
+  aliases: ["DOI", "Department of Investigation"]
+
+doitt:
+  # Predecessor of OTI (Office of Technology and Innovation); reorg'd 2022.
+  # Kept as separate entry because pre-2022 bills cite DoITT.
+  display: "Department of Information Technology and Telecommunications"
+  aliases: ["DOITT", "Department of Information Technology and Telecommunications"]
+
+dop:
+  display: "Department of Probation"
+  aliases: ["DOP", "Department of Probation"]
+
+doris:
+  display: "Department of Records and Information Services"
+  aliases: ["DORIS", "Department of Records and Information Services"]
+
+dot:
+  display: "Department of Transportation"
+  aliases: ["DOT", "Department of Transportation"]
+
+dpr:
+  display: "Department of Parks and Recreation"
+  aliases: ["DPR", "Department of Parks and Recreation"]
+
+dsny:
+  display: "Department of Sanitation"
+  aliases: ["DSNY", "Department of Sanitation"]
+
+dycd:
+  display: "Department of Youth and Community Development"
+  aliases: ["DYCD", "Department of Youth and Community Development"]
+
+edc:
+  display: "Economic Development Corporation"
+  aliases: ["EDC", "Economic Development Corporation"]
+
+fdny:
+  display: "Fire Department of New York"
+  aliases: ["FDNY", "Fire Department of New York"]
+
+fisa:
+  display: "Financial Information Services Agency"
+  aliases: ["FISA", "Financial Information Services Agency"]
+
+hh:
+  display: "Health and Hospitals"
+  aliases: ["H+H", "Health and Hospitals", "NYC Health + Hospitals"]
+
+hhs-connect:
+  display: "Health and Human Services Connect"
+  aliases: ["HHS Connect", "Health and Human Services Connect"]
+
+hpd:
+  display: "Housing Preservation and Development"
+  aliases: ["HPD", "Housing Preservation and Development"]
+
+hra:
+  display: "Human Resources Administration"
+  aliases: ["HRA", "Human Resources Administration"]
+
+cchr:
+  display: "City Commission on Human Rights"
+  aliases: ["CCHR", "City Commission on Human Rights"]
+
+hro:
+  display: "Housing Recovery Office"
+  aliases: ["HRO", "Housing Recovery Office"]
+
+iga:
+  display: "Intergovernmental Affairs"
+  aliases: ["Intergovernmental Affairs"]
+
+law:
+  # Aliased only as "Law Department" — bare "LAW" matches every legislative
+  # text and would generate massive false positives.
+  display: "Law Department"
+  aliases: ["Law Department"]
+
+city-leg:
+  display: "Legislative Affairs - City"
+  aliases: ["City Leg", "Legislative Affairs - City"]
+
+fed-leg:
+  display: "Legislative Affairs - Federal"
+  aliases: ["Fed Leg", "Legislative Affairs - Federal"]
+
+state-leg:
+  display: "Legislative Affairs - State"
+  aliases: ["State Leg", "Legislative Affairs - State"]
+
+lpc:
+  display: "Landmarks Preservation Commission"
+  aliases: ["LPC", "Landmarks Preservation Commission"]
+
+mopi:
+  display: "Mayor's Office of Pensions and Investments"
+  aliases: ["MOPI", "Mayor's Office of Pensions and Investments"]
+
+mayors-office:
+  display: "Office of the Mayor"
+  aliases: ["Mayor's Office", "Office of the Mayor"]
+
+mocj:
+  display: "Mayor's Office of Criminal Justice"
+  aliases: ["MOCJ", "Mayor's Office of Criminal Justice"]
+
+endgbv:
+  display: "Mayor's Office to End Domestic and Gender-Based Violence"
+  aliases: ["ENDGBV", "Mayor's Office to End Domestic and Gender-Based Violence"]
+
+mocs:
+  display: "Mayor's Office of Contract Services"
+  aliases: ["MOCS", "Mayor's Office of Contract Services"]
+
+moia:
+  display: "Mayor's Office of Immigrant Affairs"
+  aliases: ["MOIA", "Mayor's Office of Immigrant Affairs"]
+
+mome:
+  display: "Mayor's Office of Media and Entertainment"
+  aliases: ["MOME", "Mayor's Office of Media and Entertainment"]
+
+nypd:
+  display: "New York City Police Department"
+  aliases: ["NYPD", "New York City Police Department", "Police Department"]
+
+oath:
+  display: "Office of Administrative Trials and Hearings"
+  aliases: ["OATH", "Office of Administrative Trials and Hearings"]
+
+nycem:
+  display: "New York City Emergency Management"
+  aliases: ["NYCEM", "New York City Emergency Management", "Emergency Management"]
+
+wkdev:
+  display: "Workforce Development"
+  aliases: ["Workforce Development"]
+
+mos:
+  display: "Mayor's Office of Sustainability"
+  aliases: ["MOS", "Mayor's Office of Sustainability"]
+
+omb:
+  display: "Office of Management and Budget"
+  aliases: ["OMB", "Office of Management and Budget"]
+
+opa:
+  display: "Office of Payroll Administration"
+  aliases: ["OPA", "Office of Payroll Administration"]
+
+tlc:
+  display: "Taxi and Limousine Commission"
+  aliases: ["TLC", "Taxi and Limousine Commission"]
+
+nycha:
+  display: "New York City Housing Authority"
+  aliases: ["NYCHA", "New York City Housing Authority", "Housing Authority"]
+
+sbs:
+  display: "Small Business Services"
+  aliases: ["SBS", "Small Business Services"]
+
+mor:
+  display: "Mayor's Office of Resiliency"
+  aliases: ["MOR", "Mayor's Office of Resiliency"]
+
 mayors-office-of-operations:
+  # v1 entry; aliases unchanged. Bare "OPS"/"MOO" deliberately omitted —
+  # they false-positive ("co-ops", random 3-letter sequences).
   display: "Mayor's Office of Operations"
   aliases:
     - "Mayor's Office of Operations"
     - "Mayor's office of operations"
     - "Office of Operations"
 
-nycha:
-  display: "New York City Housing Authority"
-  aliases:
-    - "New York City Housing Authority"
-    - "NYCHA"
-    - "Housing Authority"
+mofp:
+  display: "Mayor's Office of Food Policy"
+  aliases: ["MOFP", "Mayor's Office of Food Policy"]
 
-dot:
-  display: "Department of Transportation"
-  aliases:
-    - "Department of Transportation"
-    - "DOT"
+nyc-311:
+  # The source agency table listed "311" with nameFull "City of New York"
+  # (clearly a data-entry quirk). 311 is the help-line system, treated here
+  # as its own pseudo-agency since civic researchers ask about 311.
+  display: "NYC 311"
+  aliases: ["311", "NYC 311"]
 
-dep:
-  display: "Department of Environmental Protection"
-  aliases:
-    - "Department of Environmental Protection"
-    - "DEP"
+olr:
+  display: "Office of Labor Relations"
+  aliases: ["OLR", "Office of Labor Relations"]
 
-dcas:
-  display: "Department of Citywide Administrative Services"
-  aliases:
-    - "Department of Citywide Administrative Services"
-    - "DCAS"
+panynj:
+  display: "Port Authority of New York & New Jersey"
+  aliases: ["PANYNJ", "Port Authority of New York & New Jersey", "Port Authority"]
+
+oer:
+  display: "Office of Environmental Remediation"
+  aliases: ["OER", "Office of Environmental Remediation"]
+
+hpa:
+  display: "Homelessness Prevention Administration"
+  aliases: ["HPA", "Homelessness Prevention Administration"]
+
+dvs:
+  display: "Department of Veteran Services"
+  aliases: ["DVS", "Department of Veteran Services"]
+
+fdm:
+  display: "First Deputy Mayor"
+  aliases: ["First Deputy Mayor"]
+
+dmhhs:
+  display: "Deputy Mayor for Health and Human Services"
+  aliases: ["DMHHS", "Deputy Mayor for Health and Human Services"]
+
+dmhed:
+  display: "Deputy Mayor for Housing and Economic Development"
+  aliases: ["DMHED", "Deputy Mayor for Housing and Economic Development"]
+
+dmspi:
+  display: "Deputy Mayor for Strategic Policy Initiatives"
+  aliases: ["DMSPI", "Deputy Mayor for Strategic Policy Initiatives"]
+
+mta:
+  display: "Metropolitan Transportation Authority"
+  aliases: ["MTA", "Metropolitan Transportation Authority"]
+
+senior-advisor-infrastructure:
+  display: "Senior Advisor on Infrastructure"
+  aliases: ["Senior Advisor on Infrastructure"]
+
+mayors-fund:
+  display: "Mayor's Fund to Advance New York City"
+  aliases: ["Mayor's Fund", "Mayor's Fund to Advance New York City"]
+
+hhs-accelerator:
+  display: "Health and Human Services Accelerator"
+  aliases: ["HHS Accelerator", "Health and Human Services Accelerator"]
+
+oec:
+  display: "Office of Environmental Coordination"
+  aliases: ["Office of Environmental Coordination"]
+
+mopd:
+  display: "Mayor's Office for People with Disabilities"
+  aliases: ["MOPD", "Mayor's Office for People with Disabilities"]
+
+nyc-service:
+  display: "New York City Service"
+  aliases: ["NYC Service", "New York City Service"]
+
+nypl:
+  display: "New York Public Library"
+  aliases: ["NYPL", "New York Public Library"]
+
+bpl:
+  display: "Brooklyn Public Library"
+  aliases: ["BPL", "Brooklyn Public Library"]
+
+qpl:
+  display: "Queens Public Library"
+  aliases: ["QPL", "Queens Public Library"]
+
+intl-affairs:
+  display: "Mayor's Office of International Affairs"
+  aliases: ["Mayor's Office of International Affairs"]
+
+moda:
+  display: "Mayor's Office of Data Analytics"
+  aliases: ["MODA", "Mayor's Office of Data Analytics"]
+
+sca:
+  display: "New York City School Construction Authority"
+  aliases: ["SCA", "New York City School Construction Authority", "School Construction Authority"]
+
+appointments:
+  display: "Mayor's Office of Appointments"
+  aliases: ["Mayor's Office of Appointments"]
+
+cpp:
+  display: "Climate Policy and Programs"
+  aliases: ["Climate Policy and Programs"]
+
+ocme:
+  display: "Office of Chief Medical Examiner"
+  aliases: ["OCME", "Office of Chief Medical Examiner"]
+
+mwbe:
+  display: "Minority and Women-Owned Business Enterprises"
+  aliases: ["MWBE", "Minority and Women-Owned Business Enterprises", "M/WBE"]
+
+cge:
+  display: "Commission on Gender Equity"
+  aliases: ["Commission on Gender Equity"]
+
+peu:
+  display: "Mayor's Public Engagement Unit"
+  aliases: ["Mayor's Public Engagement Unit"]
+
+dss:
+  display: "Department of Social Services"
+  aliases: ["DSS", "Department of Social Services"]
+
+oti:
+  # Successor to DoITT (2022 reorg). Kept separate from DoITT entry so
+  # post-2022 bills citing "OTI" don't get conflated with pre-2022 DoITT.
+  display: "Office of Technology and Innovation"
+  aliases: ["OTI", "Office of Technology and Innovation"]

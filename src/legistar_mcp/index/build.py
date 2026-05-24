@@ -125,12 +125,18 @@ def index_event_file(conn: Connection, json_path: Path, archive_root: Path) -> N
 
         # Mirror to event_items for bill <-> event linkage queries.
         if item.get("MatterID"):
+            item_id = item.get("ID")
+            if item_id is None:
+                # Skip malformed items; bill linkage requires globally unique
+                # ID for the event_items PK. Without it, INSERT would fail
+                # mid-transaction and abort the whole event's indexing.
+                continue
             conn.execute(
                 "INSERT OR REPLACE INTO event_items "
                 "(item_id, event_id, bill_id, item_title, item_sequence, action_name) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
                 (
-                    item["ID"],
+                    item_id,
                     e["ID"],
                     item["MatterID"],
                     item.get("Title"),

@@ -57,6 +57,66 @@ def test_index_event_skips_items_without_matter_id(tmp_path, fixtures_root):
     assert all(r["bill_id"] is not None for r in rows)
 
 
+def test_index_event_skips_item_with_matter_id_but_missing_id(tmp_path):
+    """An item with MatterID but no ID must be skipped, not abort the
+    whole event's indexing with a KeyError."""
+    import json
+    from legistar_mcp.db import init_db
+    from legistar_mcp.index.build import index_event_file
+
+    conn = init_db(tmp_path / "t.db")
+    event = {
+        "ID": 88888,
+        "GUID": "EVT-GUID",
+        "BodyID": 1,
+        "BodyName": "Committee Z",
+        "Date": "2024-08-15T13:30:00-04:00",
+        "Location": "Loc",
+        "LastModified": "2024-08-10T00:00:00Z",
+        "Items": [
+            # First item: valid — MatterID and ID both present.
+            {
+                "ID": 700001,
+                "MatterID": 1234,
+                "Title": "good item",
+                "ActionName": "Hearing Held by Committee",
+                "AgendaSequence": 1,
+            },
+            # Second item: malformed — MatterID present but ID missing.
+            {
+                "MatterID": 5678,
+                "Title": "malformed item with no ID",
+                "AgendaSequence": 2,
+            },
+            # Third item: valid — should still get indexed after the skip.
+            {
+                "ID": 700003,
+                "MatterID": 9012,
+                "Title": "another good item",
+                "AgendaSequence": 3,
+            },
+        ],
+    }
+    archive_root = tmp_path / "archive"
+    events_dir = archive_root / "events"
+    events_dir.mkdir(parents=True)
+    event_path = events_dir / "synthetic.json"
+    event_path.write_text(json.dumps(event), encoding="utf-8")
+
+    # Must not raise.
+    index_event_file(conn, event_path, archive_root=archive_root)
+    conn.commit()
+
+    rows = conn.execute(
+        "SELECT item_id, bill_id FROM event_items WHERE event_id = 88888"
+    ).fetchall()
+    item_ids = {r["item_id"] for r in rows}
+    assert item_ids == {700001, 700003}
+    # The malformed item was skipped — its MatterID never landed.
+    bill_ids = {r["bill_id"] for r in rows}
+    assert 5678 not in bill_ids
+
+
 def test_index_event_preserves_action_name_when_present(tmp_path, fixtures_root):
     """ActionName flows into event_items.action_name; absent ActionName becomes NULL."""
     from legistar_mcp.db import init_db

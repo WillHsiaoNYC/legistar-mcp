@@ -14,7 +14,11 @@ SCHEMA_PATH = Path(__file__).parent / "index" / "schema.sql"
 #       existing DBs until --full re-runs the event indexer.
 #   3 — `votes` table added for council voting records (Batch C). Empty for
 #       existing DBs until --full re-runs the bill indexer.
-SCHEMA_VERSION = 3
+#   4 — `events.insite_url` column added. The prior practice of constructing
+#       MeetingDetail.aspx URLs from API ID/GUID emitted "Invalid parameters!"
+#       links; the source JSON's InSiteURL is authoritative. NULL on existing
+#       rows until --full re-runs the event indexer.
+SCHEMA_VERSION = 4
 
 
 def open_db(db_path: Path) -> sqlite3.Connection:
@@ -65,6 +69,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
             continue
         if "guid" not in cols:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN guid TEXT")
+    conn.commit()
+
+    # insite_url added in SCHEMA_VERSION 4 — authoritative event web URL.
+    events_cols = {r["name"] for r in conn.execute("PRAGMA table_info(events)")}
+    if events_cols and "insite_url" not in events_cols:
+        conn.execute("ALTER TABLE events ADD COLUMN insite_url TEXT")
     conn.commit()
 
     # event_items is new in SCHEMA_VERSION 2 (Batch B, tools expansion).

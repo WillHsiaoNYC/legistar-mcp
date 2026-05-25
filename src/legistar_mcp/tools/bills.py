@@ -15,11 +15,17 @@ _SNIPPET_FIELDS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _legistar_url(bill_id: int | None, guid: str | None) -> str | None:
-    """Build the public Legistar LegislationDetail URL, or None if missing parts."""
-    if not bill_id or not guid:
+def _legistar_url(bill_id: int | None) -> str | None:
+    """Build a public Legistar URL for the matter, or None if missing the id.
+
+    Uses the InSite gateway because our source `ID` is the matter "key" used
+    by gateway.aspx, NOT the numeric id LegislationDetail.aspx?ID= expects
+    (those are a different, larger id space). Legistar resolves the gateway
+    redirect to the canonical detail page server-side.
+    """
+    if not bill_id:
         return None
-    return f"https://legistar.council.nyc.gov/LegislationDetail.aspx?ID={bill_id}&GUID={guid}"
+    return f"https://legistar.council.nyc.gov/gateway.aspx?m=l&id=/matter.aspx?key={bill_id}"
 
 
 def search_bills(
@@ -83,7 +89,8 @@ def search_bills(
 
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     for r in rows:
-        r["legistar_url"] = _legistar_url(r.get("id"), r.pop("guid", None))
+        r.pop("guid", None)
+        r["legistar_url"] = _legistar_url(r.get("id"))
 
     if agency and rows:
         phrases = _extract_phrases(query) if query else []
@@ -133,7 +140,7 @@ def get_bill(
         return None
     with open(Path(archive_root) / row["path"], encoding="utf-8") as f:
         bill = json.load(f)
-    bill["LegistarURL"] = _legistar_url(bill.get("ID"), bill.get("GUID"))
+    bill["LegistarURL"] = _legistar_url(bill.get("ID"))
     return bill
 
 
@@ -262,5 +269,6 @@ def recent_bills(
     params.append(limit)
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     for r in rows:
-        r["legistar_url"] = _legistar_url(r.get("id"), r.pop("guid", None))
+        r.pop("guid", None)
+        r["legistar_url"] = _legistar_url(r.get("id"))
     return rows

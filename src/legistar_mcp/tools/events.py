@@ -22,11 +22,11 @@ _SNIPPET_FIELDS: tuple[tuple[str, str], ...] = (
 _MAX_MENTIONS_PER_EVENT = 5
 
 
-def _legistar_url(event_id: int | None, guid: str | None) -> str | None:
-    """Build the public Legistar MeetingDetail URL, or None if missing parts."""
-    if not event_id or not guid:
-        return None
-    return f"https://legistar.council.nyc.gov/MeetingDetail.aspx?ID={event_id}&GUID={guid}"
+# Event public URLs come from the source JSON's `InSiteURL` field. We tried
+# constructing MeetingDetail.aspx URLs from our API ID/GUID — the web detail
+# page uses different identifiers (LEGID/GID/G with a separate web-side GUID),
+# so the constructed links resolved to "Invalid parameters!". The source data
+# already ships the correct link; we just store and surface it.
 
 
 def search_events(
@@ -63,7 +63,7 @@ def search_events(
         params.append(committee)
 
     sql = (
-        "SELECT DISTINCT events.id, events.guid, events.body_name, events.date, events.location "
+        "SELECT DISTINCT events.id, events.insite_url, events.body_name, events.date, events.location "
         "FROM events" + join
     )
     if where:
@@ -73,7 +73,7 @@ def search_events(
 
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     for r in rows:
-        r["legistar_url"] = _legistar_url(r.get("id"), r.pop("guid", None))
+        r["legistar_url"] = r.pop("insite_url", None)
 
     # Agency mode: build per-event mentions by reading source JSON for each match.
     # A council meeting can have 100+ Items × 3 fields × N alias phrases; without
@@ -126,7 +126,7 @@ def get_event(conn: Connection, archive_root: Path, id: int) -> dict | None:
         return None
     with open(Path(archive_root) / row["path"], encoding="utf-8") as f:
         event = json.load(f)
-    event["LegistarURL"] = _legistar_url(event.get("ID"), event.get("GUID"))
+    event["LegistarURL"] = event.get("InSiteURL")
     return event
 
 
@@ -144,7 +144,7 @@ def upcoming_events(
     # against a date-only cutoff would otherwise drop events on the cutoff day.
     cutoff = (_dt.date.today() + _dt.timedelta(days=days + 1)).isoformat()
     sql = (
-        "SELECT events.id, events.guid, events.body_name, events.date, events.location "
+        "SELECT events.id, events.insite_url, events.body_name, events.date, events.location "
         "FROM events WHERE events.date >= ? AND events.date < ?"
     )
     params: list = [today, cutoff]
@@ -155,7 +155,7 @@ def upcoming_events(
     params.append(limit)
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     for r in rows:
-        r["legistar_url"] = _legistar_url(r.get("id"), r.pop("guid", None))
+        r["legistar_url"] = r.pop("insite_url", None)
     return rows
 
 
@@ -181,7 +181,7 @@ def get_bill_hearings(
         return []
 
     sql = (
-        "SELECT events.id, events.guid, events.body_name, events.date, "
+        "SELECT events.id, events.insite_url, events.body_name, events.date, "
         "events.location, ei.item_title, ei.item_sequence, ei.action_name "
         "FROM event_items ei JOIN events ON ei.event_id = events.id "
         "WHERE ei.bill_id = ?"
@@ -199,7 +199,7 @@ def get_bill_hearings(
     params.append(limit)
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     for r in rows:
-        r["legistar_url"] = _legistar_url(r.get("id"), r.pop("guid", None))
+        r["legistar_url"] = r.pop("insite_url", None)
     return rows
 
 
@@ -209,12 +209,12 @@ def get_event_bills(conn: Connection, event_id: int) -> list[dict]:
     _check_table_populated(conn, "event_items", "events")
 
     sql = (
-        "SELECT bills.id, bills.guid, bills.file, bills.title, bills.status_name, "
+        "SELECT bills.id, bills.file, bills.title, bills.status_name, "
         "ei.item_title, ei.item_sequence, ei.action_name "
         "FROM event_items ei JOIN bills ON ei.bill_id = bills.id "
         "WHERE ei.event_id = ? ORDER BY ei.item_sequence ASC"
     )
     rows = [dict(r) for r in conn.execute(sql, (event_id,)).fetchall()]
     for r in rows:
-        r["legistar_url"] = _legistar_url_bill(r.get("id"), r.pop("guid", None))
+        r["legistar_url"] = _legistar_url_bill(r.get("id"))
     return rows

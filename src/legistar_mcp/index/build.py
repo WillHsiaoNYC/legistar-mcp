@@ -99,12 +99,12 @@ def index_event_file(conn: Connection, json_path: Path, archive_root: Path) -> N
         conn.execute("DELETE FROM event_items WHERE event_id = ?", (e["ID"],))
         conn.execute(
             """INSERT OR REPLACE INTO events
-               (id, guid, body_id, body_name, date, location, last_modified, path)
-               VALUES (?,?,?,?,?,?,?,?)""",
+               (id, guid, body_id, body_name, date, location, last_modified, path, insite_url)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
             (
                 e["ID"], e.get("GUID"), e.get("BodyID"), e.get("BodyName"),
                 e.get("Date"), e.get("Location"),
-                e.get("LastModified"), rel_path,
+                e.get("LastModified"), rel_path, e.get("InSiteURL"),
             ),
         )
 

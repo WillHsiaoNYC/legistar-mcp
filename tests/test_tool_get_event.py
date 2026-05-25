@@ -29,7 +29,6 @@ def test_get_event_includes_legistar_url(indexed_db):
     conn, root = indexed_db
     event_id = conn.execute("SELECT id FROM events LIMIT 1").fetchone()["id"]
     event = get_event(conn, archive_root=root, id=event_id)
-    assert event["LegistarURL"] == (
-        "https://legistar.council.nyc.gov/MeetingDetail.aspx"
-        f"?ID={event['ID']}&GUID={event['GUID']}"
-    )
+    # InSiteURL is the source-data field that's actually a working link;
+    # surface it verbatim rather than reconstructing.
+    assert event["LegistarURL"] == event["InSiteURL"]

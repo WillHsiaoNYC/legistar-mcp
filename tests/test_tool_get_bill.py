@@ -29,6 +29,6 @@ def test_get_bill_includes_legistar_url(indexed_db):
     conn, root = indexed_db
     bill = get_bill(conn, archive_root=root, file="Int 0153-2022")
     assert bill["LegistarURL"] == (
-        "https://legistar.council.nyc.gov/LegislationDetail.aspx"
-        f"?ID={bill['ID']}&GUID={bill['GUID']}"
+        "https://legistar.council.nyc.gov/gateway.aspx"
+        f"?m=l&id=/matter.aspx?key={bill['ID']}"
     )

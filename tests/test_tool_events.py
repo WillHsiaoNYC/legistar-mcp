@@ -37,9 +37,12 @@ def test_search_events_results_include_legistar_url(indexed_db):
     results = search_events(indexed_db, limit=5)
     assert results
     hit = results[0]
+    # Event JSON ships an authoritative InSiteURL field with a different
+    # web-side GUID than the API GUID; surface it verbatim. Constructing the
+    # URL from the source ID/GUID produced "Invalid parameters!" pages.
     assert hit["legistar_url"] == (
         "https://legistar.council.nyc.gov/MeetingDetail.aspx"
-        f"?ID={hit['id']}&GUID=2E5AFBF9-B5AA-4295-B8F2-3368AB913D57"
+        "?LEGID=21015&GID=61&G=2FD004F1-D85B-4588-A648-0A736C77D6E3"
     )
     # The transient guid column from the SELECT must not leak into output.
     assert "guid" not in hit

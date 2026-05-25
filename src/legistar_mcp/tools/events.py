@@ -203,6 +203,77 @@ def get_bill_hearings(
     return rows
 
 
+_EVENT_ALLOWED_GROUP_BY = {"body_name", "event_year", "event_month"}
+
+
+def aggregate_events(
+    conn: Connection,
+    group_by: list[str],
+    date_from: str | None = None,
+    date_to: str | None = None,
+    committee: str | None = None,
+    agency: str | None = None,
+    limit: int = 100,
+) -> list[dict]:
+    """Group events by one or more dimensions and return per-group counts.
+
+    Allowed group_by values: body_name, event_year, event_month. Filters mirror
+    search_events (date_from/date_to/committee/agency). Mirror of
+    aggregate_bills for the events table — useful for answering "which
+    committees held the most hearings in <year>?" in one round-trip.
+
+    Date comparison uses lex order on stored ISO timestamps; pass full-day
+    strings for date_to with care (matches search_events semantics).
+    """
+    if not group_by:
+        raise ValueError("group_by must contain at least one dimension")
+    for g in group_by:
+        if g not in _EVENT_ALLOWED_GROUP_BY:
+            raise ValueError(
+                f"unsupported group_by dimension: {g!r}. "
+                f"Allowed: {sorted(_EVENT_ALLOWED_GROUP_BY)}"
+            )
+
+    expr = {
+        "body_name": "events.body_name",
+        "event_year": "CAST(substr(events.date, 1, 4) AS INTEGER)",
+        "event_month": "substr(events.date, 1, 7)",
+    }
+    select_cols = [f"{expr[g]} AS {g}" for g in group_by]
+
+    where, params, joins = [], [], []
+    if agency:
+        query = resolve_to_fts_query(agency, _get_agencies())
+        joins.append("JOIN events_fts_map m ON events.id = m.event_id")
+        joins.append("JOIN events_fts f ON m.fts_rowid = f.rowid")
+        where.append("events_fts MATCH ?")
+        params.append(query)
+    if date_from:
+        where.append("events.date >= ?")
+        params.append(date_from)
+    if date_to:
+        where.append("events.date <= ?")
+        params.append(date_to)
+    if committee:
+        where.append("events.body_name = ?")
+        params.append(committee)
+
+    # COUNT(DISTINCT) because agency mode joins events_fts_map, which
+    # produces one row per matching event item — without DISTINCT a
+    # council meeting with 5 NYPD-mentioning items would be counted 5x.
+    sql = (
+        f"SELECT {', '.join(select_cols)}, COUNT(DISTINCT events.id) AS count "
+        f"FROM events {' '.join(joins)}"
+    )
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += f" GROUP BY {', '.join(group_by)}"
+    sql += " ORDER BY count DESC, " + ", ".join(group_by)
+    sql += " LIMIT ?"
+    params.append(limit)
+    return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
 def get_event_bills(conn: Connection, event_id: int) -> list[dict]:
     """Bills on the agenda for a specific event. Raises StaleIndexError if
     the event_items table is empty post-upgrade."""

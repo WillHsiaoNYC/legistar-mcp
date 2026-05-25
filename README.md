@@ -16,8 +16,13 @@ Once installed, paste any of these into your AI agent:
 > → The bills, plus a snippet of statutory text so you can tell whether MOO
 > is *directed*, *consulted*, or *reporting to*.
 
-> *"What is Councilmember XYZ's voting history this year?"*
-> → Every roll-call vote they cast, with the bill, date, and outcome.
+> *"Give me the most recent 5 bills of Committee XYZ."*
+> → The 5 newest bills assigned to that committee, with intro date,
+> sponsors, status, and links.
+
+> *"What are the most recent bills passed by Council vote?"*
+> → A list of bills the Council has most recently voted to enact, with the
+> vote tally and date.
 
 > *"Give me upcoming City Council hearings in the next 6 months involving
 > NYPD, with links."*
@@ -26,32 +31,6 @@ Once installed, paste any of these into your AI agent:
 
 **Every result links to the official Legistar record.** You can verify any
 claim the agent makes against the source.
-
-## Data source — you supply it
-
-**This package does not ship or fetch legislative data.** It indexes a local
-checkout of [`jehiah/nyc_legislation`](https://github.com/jehiah/nyc_legislation),
-an open JSON mirror of the NYC Council Legistar API maintained by
-[Jehiah Czebotar](https://github.com/jehiah). You provide that checkout when
-you run `legistar-mcp index`.
-
-The archive shape (what the indexer walks):
-
-- `introduction/{year}/*.json` — introduced bills
-- `resolution/{year}/*.json` — resolutions
-- `land_use/{year}/*.json` — land-use applications
-- `events/{year}/*.json` — committee hearings + full Council meetings
-- `people/*.json` — council members
-
-Clone size: ~2 GB with full history, or ~700 MB with `--depth 1`.
-
-## Requirements
-
-- **Python 3.11+** and **[`uv`](https://docs.astral.sh/uv/)** — uv handles the
-  install. It's the only Python toolchain you need to know about.
-- **~3 GB free disk** for the archive (~2 GB) + the index (~105 MB).
-- **An MCP-compatible AI client** — Claude Desktop, Claude Code, Cursor,
-  Continue.dev, etc.
 
 ## Quickstart
 
@@ -210,6 +189,34 @@ is populated.
 
 If the tools don't appear at all, jump to [Troubleshooting](#troubleshooting).
 
+## What this needs
+
+**Data source — you supply it.** This package does not ship or fetch
+legislative data. It indexes a local checkout of
+[`jehiah/nyc_legislation`](https://github.com/jehiah/nyc_legislation), an
+open JSON mirror of the NYC Council Legistar API maintained by
+[Jehiah Czebotar](https://github.com/jehiah). The auto-install prompt
+above clones it for you; you can also clone it yourself before running
+`legistar-mcp index`.
+
+The archive shape (what the indexer walks):
+
+- `introduction/{year}/*.json` — introduced bills
+- `resolution/{year}/*.json` — resolutions
+- `land_use/{year}/*.json` — land-use applications
+- `events/{year}/*.json` — committee hearings + full Council meetings
+- `people/*.json` — council members
+
+Clone size: ~2 GB with full history, or ~700 MB with `--depth 1`.
+
+**Requirements:**
+
+- **Python 3.11+** and **[`uv`](https://docs.astral.sh/uv/)** — uv handles the
+  install. It's the only Python toolchain you need to know about.
+- **~3 GB free disk** for the archive (~2 GB) + the index (~105 MB).
+- **An MCP-compatible AI client** — Claude Desktop, Claude Code, Cursor,
+  Continue.dev, etc.
+
 ## Tools
 
 | Tool | Returns |
@@ -220,8 +227,9 @@ If the tools don't appear at all, jump to [Troubleshooting](#troubleshooting).
 | `get_person` | Profile by `slug` (e.g. `adrienne-e-adams`) plus sponsored-bill counts grouped by status. |
 | `search_events` | Hearings/events by `query`, `agency`, `committee`, `date_from`, `date_to`. Includes per-item `mentions` snippets when `agency` is used. |
 | `get_event` | Full event record by numeric `id` — agenda items, minutes notes, votes. |
-| `list_committees` | All committees with bill + event counts. Useful for orienting. |
+| `list_committees` | All committees with bill + event counts, plus `first_bill_date` / `first_event_date` (earliest activity in the archive — a *lower bound*, not an establishment date). Optional `year_from` / `year_to` narrows both counts to a year window — useful for "most active committees last year". |
 | `aggregate_bills` | Per-group counts when bills are grouped by one or more dimensions (`status_name`, `type_name`, `body_name`, `sponsor_slug`, `intro_year`). Same filter surface as `search_bills`. |
+| `aggregate_events` | Per-group counts when events are grouped by one or more dimensions (`body_name`, `event_year`, `event_month`). Same filter surface as `search_events` (`date_from`/`date_to`/`committee`/`agency`). |
 | `list_vocabulary` | Distinct non-null values for a known column (`status_name`, `type_name`, `body_name`, `event_committee`) — discover the exact spelling of statuses, types, and committees. |
 | `recent_bills` | Bills introduced within the last `days` days. Convenience wrapper; for agency-scoped searches use `search_bills(agency=...)`. |
 | `upcoming_events` | Events scheduled in the next `days` days. Optional `committee` body_name filter. |

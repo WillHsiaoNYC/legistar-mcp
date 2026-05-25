@@ -30,6 +30,26 @@ def test_list_committees_orders_by_total_desc(indexed_db):
     assert totals == sorted(totals, reverse=True)
 
 
+def test_list_committees_year_filter_narrows_counts(indexed_db):
+    # Without filter the fixture has bills across 2022-2024 and one 2024 event.
+    # year_from=2099 must exclude everything from both branches.
+    assert list_committees(indexed_db, year_from=2099) == []
+
+
+def test_list_committees_year_filter_includes_window_only(indexed_db):
+    # year_from/year_to should narrow both bill_count and event_count to the
+    # given window. Fixture's only event is 2024-08-15; restricting to 2024
+    # alone must still include it.
+    rows = list_committees(indexed_db, year_from=2024, year_to=2024)
+    cc = next((r for r in rows if r["name"] == "City Council"), None)
+    assert cc is not None
+    assert cc["event_count"] >= 1
+    # Bills from 2022/2023 must NOT be counted under this window.
+    total_bills = sum(r["bill_count"] for r in rows)
+    # Fixture has one 2024 bill (Int 0001-2024). Older bills excluded.
+    assert total_bills == 1
+
+
 def test_list_committees_exposes_first_seen_dates(indexed_db):
     # first_bill_date / first_event_date are the earliest activity dates we
     # have in the archive for each committee — a proxy for "when did this

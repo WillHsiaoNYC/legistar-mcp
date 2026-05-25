@@ -1,4 +1,4 @@
-"""MCP stdio server wiring the 16 Legistar tools.
+"""MCP stdio server wiring the 17 Legistar tools.
 
 Reads `LEGISTAR_DB_PATH` from the environment at startup and fails fast if it
 is missing or doesn't exist. The archive root is read from the indexed DB
@@ -26,6 +26,7 @@ VocabField = Literal["status_name", "type_name", "body_name", "event_committee"]
 GroupByDim = Literal[
     "status_name", "type_name", "body_name", "sponsor_slug", "intro_year"
 ]
+EventGroupByDim = Literal["body_name", "event_year", "event_month"]
 
 from .db import open_db
 
@@ -42,6 +43,7 @@ from .tools.bills import get_bill as _get_bill
 from .tools.bills import recent_bills as _recent_bills
 from .tools.bills import search_bills as _search_bills
 from .tools.committees import list_committees as _list_committees
+from .tools.events import aggregate_events as _aggregate_events
 from .tools.events import get_bill_hearings as _get_bill_hearings
 from .tools.events import get_event as _get_event
 from .tools.events import get_event_bills as _get_event_bills
@@ -183,9 +185,12 @@ def make_server() -> FastMCP:
 
     @server.tool()
     @_db_locked
-    def list_committees() -> list[dict]:
-        """List all committees with bill and event counts."""
-        return _list_committees(conn)
+    def list_committees(
+        year_from: int | None = None,
+        year_to: int | None = None,
+    ) -> list[dict]:
+        """List all committees with bill/event counts and first-seen dates. Optional year_from/year_to narrows both counts to that inclusive year window — useful for 'most active committees last year' style questions."""
+        return _list_committees(conn, year_from=year_from, year_to=year_to)
 
     @server.tool()
     @_db_locked
@@ -210,6 +215,27 @@ def make_server() -> FastMCP:
             type=type,
             committee=committee,
             sponsor_slug=sponsor_slug,
+            agency=agency,
+            limit=limit,
+        )
+
+    @server.tool()
+    @_db_locked
+    def aggregate_events(
+        group_by: list[EventGroupByDim],
+        date_from: str | None = None,
+        date_to: str | None = None,
+        committee: str | None = None,
+        agency: str | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Group events by one or more dimensions (body_name, event_year, event_month) and return per-group counts. Supports search_events filters (date_from/date_to/committee/agency)."""
+        return _aggregate_events(
+            conn,
+            group_by=group_by,
+            date_from=date_from,
+            date_to=date_to,
+            committee=committee,
             agency=agency,
             limit=limit,
         )

@@ -2,10 +2,30 @@
 
 An MCP server that lets your desktop AI agent — Claude Desktop, Claude Code,
 Cursor, or any other MCP-compatible client — search NYC City Council
-legislation: 19,656 bills, 16,776 hearings, 247 council members. Built
+legislation: 21,270 bills, 17,225 hearings, 253 council members. Built
 specifically for civic-research workflows where you need not just *whether* a
 bill mentions an agency, but the surrounding statutory sentence that
 characterizes that agency's role.
+
+## What you can ask
+
+Once installed, paste any of these into your AI agent:
+
+> *"Find council bills from the past 2 years involving the Mayor's Office of
+> Operations — with links and a quote characterizing MOO's role in each."*
+> → The bills, plus a snippet of statutory text so you can tell whether MOO
+> is *directed*, *consulted*, or *reporting to*.
+
+> *"What is Councilmember XYZ's voting history this year?"*
+> → Every roll-call vote they cast, with the bill, date, and outcome.
+
+> *"Give me upcoming City Council hearings in the next 6 months involving
+> NYPD, with links."*
+> → A dated list of scheduled hearings with the agenda items that mention
+> NYPD, each linking to the official Legistar record.
+
+**Every result links to the official Legistar record.** You can verify any
+claim the agent makes against the source.
 
 ## Data source — you supply it
 
@@ -35,7 +55,60 @@ Clone size: ~2 GB with full history, or ~700 MB with `--depth 1`.
 
 ## Quickstart
 
-End-to-end setup in ~3 minutes. Copy-paste, no substitutions needed:
+**Your AI has to be running on this computer** — a desktop app or a terminal-based tool. Web AIs (claude.ai, chatgpt.com) run in the cloud and can't install things on your machine; [skip to manual install](#manual-install) if that's you.
+
+Two paths — pick the one that matches you:
+
+<table>
+<thead>
+<tr>
+<th>🖥️ I use my AI as a desktop app on this computer</th>
+<th>⌨️ I'm a developer using my AI in a terminal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Claude Desktop · ChatGPT (desktop app) · Cursor · etc.</td>
+<td>Claude Code · Codex CLI · etc.</td>
+</tr>
+<tr>
+<td>
+<ol>
+<li>Open a new chat in your AI app.</li>
+<li>Paste the message below.</li>
+<li>Click <strong>Allow</strong> each time your AI asks for permission.</li>
+</ol>
+</td>
+<td>
+<ol>
+<li>Start your AI in the terminal.</li>
+<li>Paste the message below.</li>
+<li>Press <strong>y</strong> to allow each step.</li>
+</ol>
+</td>
+</tr>
+</tbody>
+</table>
+
+**The message to paste:**
+
+```
+Install the MCP server at https://github.com/WillHsiaoNYC/legistar-mcp
+on this machine — follow its README to clone the data archive, install
+the package, build the index, and wire it into my MCP client config.
+Then run a verification query to confirm it works.
+```
+
+> [!TIP]
+> **What "done" looks like:** your AI reports something like `Indexed: bills=21270 events=17225 people=253` and confirms it's connected to your AI app. Total time ~3 minutes, most of it the 700 MB data download. After that, restart your AI app and start asking questions.
+
+> [!WARNING]
+> **If you only use AI through a website** (claude.ai, chatgpt.com), it can't install things on your computer — use the manual install below.
+
+<details id="manual-install">
+<summary><strong>Manual install</strong> — for website-only AI users, or if you'd rather run the commands yourself</summary>
+
+Three commands to run in your terminal. Copy-paste, no substitutions needed:
 
 ```sh
 mkdir -p ~/legistar && cd ~/legistar
@@ -46,14 +119,14 @@ git clone --depth 1 https://github.com/jehiah/nyc_legislation.git
 # 2. Install this server
 uv tool install git+https://github.com/WillHsiaoNYC/legistar-mcp
 
-# 3. Build the index (silent for ~80 seconds, then prints stats)
+# 3. Build the search index (~80 seconds)
 legistar-mcp index --archive ./nyc_legislation --db ./legistar.db
 ```
 
 You should see:
 
 ```
-Indexed: bills=19656 events=16776 people=247
+Indexed: bills=21270 events=17225 people=253
 ```
 
 Final folder layout:
@@ -64,12 +137,11 @@ Final folder layout:
 └── legistar.db        ← SQLite index (~105 MB)
 ```
 
-Now [configure your AI agent](#configure-your-ai-agent) below.
+Now [configure your AI agent](#configure-your-ai-agent) below using the per-client JSON snippets.
 
-> **Windows note:** the commands work as-is in Git Bash / WSL. In native
-> PowerShell, replace `mkdir -p ~/legistar && cd ~/legistar` with
-> `New-Item -Force -ItemType Directory $HOME\legistar; cd $HOME\legistar`.
-> Everything else is identical.
+> **Windows note:** the commands work as-is in Git Bash / WSL. In native PowerShell, replace `mkdir -p ~/legistar && cd ~/legistar` with `New-Item -Force -ItemType Directory $HOME\legistar; cd $HOME\legistar`. Everything else is identical.
+
+</details>
 
 ## Configure your AI agent
 
@@ -159,15 +231,11 @@ If the tools don't appear at all, jump to [Troubleshooting](#troubleshooting).
 | `get_voting_record` | Every vote a council member (`slug`) has cast — filter by `year_from`/`year_to` and `vote_value` (e.g., 'Affirmative', 'Negative', 'Absent'). |
 | `vote_breakdown` | Every council member's vote on a specific bill (`bill_id`); sorted most-recent first with NULL-date rows last; bound result with `limit` (default 100). |
 
-## Example: bills involving the Mayor's Office of Operations
+## How agency role-context works
 
-Ask your agent:
-
-> Find NYC Council bills since 2022 that direct the Mayor's Office of
-> Operations to do something, and quote the sentence that names them.
-
-The agent calls `search_bills` with `agency="Mayor's Office of Operations"`
-and `year_from=2022`. The server resolves the agency name against
+This is the differentiator behind the MOO example up top. When you ask about
+an agency, the agent calls `search_bills` with `agency="Mayor's Office of
+Operations"` and a year filter. The server resolves the agency name against
 `agencies.yaml` aliases, runs FTS5, and attaches a role-context snippet from
 each hit's source JSON. A real result for `Int 0153-2022`:
 

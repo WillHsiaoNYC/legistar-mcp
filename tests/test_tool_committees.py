@@ -28,3 +28,26 @@ def test_list_committees_orders_by_total_desc(indexed_db):
     results = list_committees(indexed_db)
     totals = [r["bill_count"] + r["event_count"] for r in results]
     assert totals == sorted(totals, reverse=True)
+
+
+def test_list_committees_exposes_first_seen_dates(indexed_db):
+    # first_bill_date / first_event_date are the earliest activity dates we
+    # have in the archive for each committee — a proxy for "when did this
+    # committee start showing up?". Both keys must be present on every row,
+    # populated as ISO date strings where there's activity and NULL otherwise.
+    results = list_committees(indexed_db)
+    assert all("first_bill_date" in r and "first_event_date" in r for r in results)
+    # Each date, when present, must match its count: a committee with bills
+    # has a first_bill_date; one with events has a first_event_date.
+    for r in results:
+        if r["bill_count"] > 0:
+            assert r["first_bill_date"] and r["first_bill_date"].startswith("20")
+        else:
+            assert r["first_bill_date"] is None
+        if r["event_count"] > 0:
+            assert r["first_event_date"] and r["first_event_date"].startswith("20")
+        else:
+            assert r["first_event_date"] is None
+    # The fixture exercises both paths.
+    assert any(r["first_bill_date"] for r in results)
+    assert any(r["first_event_date"] for r in results)

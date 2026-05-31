@@ -3,8 +3,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
-data/*.db
-data/*.db-journal
+data/
 *.egg-info/
 dist/
 .mcp.json

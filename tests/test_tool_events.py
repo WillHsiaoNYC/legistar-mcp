@@ -33,6 +33,24 @@ def test_search_events_date_filter_rejects_out_of_range(indexed_db):
     assert results == []
 
 
+def test_search_events_date_to_includes_boundary_day(indexed_db):
+    # The fixture event is 2024-08-15T13:30:00-04:00 (a full ISO timestamp).
+    # A date-only date_to of that same day must still include it — a raw lex
+    # `events.date <= '2024-08-15'` would drop it because the timestamp sorts
+    # after the bare date.
+    results = search_events(indexed_db, date_to="2024-08-15", limit=5)
+    assert any(r["id"] == 21015 for r in results)
+
+
+def test_search_events_date_to_full_timestamp_still_excludes_later(indexed_db):
+    # A full-timestamp date_to BEFORE the event must still exclude it (the
+    # whole-day expansion only applies to bare YYYY-MM-DD).
+    results = search_events(
+        indexed_db, date_to="2024-08-15T12:00:00-04:00", limit=5
+    )
+    assert all(r["id"] != 21015 for r in results)
+
+
 def test_search_events_results_include_legistar_url(indexed_db):
     results = search_events(indexed_db, limit=5)
     assert results

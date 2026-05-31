@@ -1,5 +1,7 @@
 from sqlite3 import Connection
 
+from ._aggregate import year_window
+
 
 def list_committees(
     conn: Connection,
@@ -12,7 +14,9 @@ def list_committees(
     bills introduced (bills.intro_date) and events scheduled (events.date)
     within the inclusive year window. When filtered, first_bill_date /
     first_event_date are the earliest dates within that window. Committees
-    with no activity in the window drop out entirely.
+    with no activity in the window drop out entirely. Bills/events with a NULL
+    date are counted in the unfiltered totals but excluded once any year window
+    is applied — a date-less record can't be placed in a year.
 
     `first_bill_date` / `first_event_date` are the earliest dates this body
     appears on a bill or event in the indexed archive — a proxy for "when did
@@ -27,25 +31,13 @@ def list_committees(
     # MAX() over (date, NULL) returns the date because SQL aggregates skip
     # NULLs, so the outer MAX coalesces the two branches' per-table MIN()s.
 
-    # Date predicates applied symmetrically to both branches. year_to uses an
-    # exclusive next-year-Jan-1 upper bound so full ISO timestamps on Dec 31
-    # aren't lex-excluded — same fix as aggregate_bills.
-    bill_filters: list[str] = []
-    event_filters: list[str] = []
-    bill_params: list = []
-    event_params: list = []
-    if year_from is not None:
-        bill_filters.append("intro_date >= ?")
-        bill_params.append(f"{year_from}-01-01")
-        event_filters.append("date >= ?")
-        event_params.append(f"{year_from}-01-01")
-    if year_to is not None:
-        bill_filters.append("intro_date < ?")
-        bill_params.append(f"{year_to + 1}-01-01")
-        event_filters.append("date < ?")
-        event_params.append(f"{year_to + 1}-01-01")
-    bill_extra = (" AND " + " AND ".join(bill_filters)) if bill_filters else ""
-    event_extra = (" AND " + " AND ".join(event_filters)) if event_filters else ""
+    # Inclusive [year_from, year_to] window, applied symmetrically to bills
+    # (intro_date) and events (date). year_window handles the exclusive
+    # next-year-Jan-1 upper bound so Dec-31 ISO timestamps aren't lex-excluded.
+    bill_clauses, bill_params = year_window("intro_date", year_from, year_to)
+    event_clauses, event_params = year_window("date", year_from, year_to)
+    bill_extra = "".join(f" AND {c}" for c in bill_clauses)
+    event_extra = "".join(f" AND {c}" for c in event_clauses)
 
     sql = f"""
         SELECT

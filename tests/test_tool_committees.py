@@ -50,6 +50,31 @@ def test_list_committees_year_filter_includes_window_only(indexed_db):
     assert total_bills == 1
 
 
+def test_list_committees_null_intro_date_counted_unfiltered_dropped_when_windowed(
+    indexed_db,
+):
+    # A bill with no intro_date can't be placed in any year window. It IS
+    # counted in the unfiltered bill_count, but intentionally drops out once a
+    # year filter is applied (even one as wide as 1900-2100) — you can't claim
+    # a date-less bill belongs to a year. Lock this so the filtered and
+    # unfiltered code paths stay deliberately, not accidentally, divergent.
+    body = "Committee on Health"
+    before = {r["name"]: r["bill_count"] for r in list_committees(indexed_db)}
+    indexed_db.execute(
+        "INSERT INTO bills (id, file, body_name, intro_date, path) "
+        "VALUES (?, ?, ?, NULL, ?)",
+        (960001, "Int 7777-2024", body, "bills/nointro.json"),
+    )
+    indexed_db.commit()
+    after = {r["name"]: r["bill_count"] for r in list_committees(indexed_db)}
+    assert after[body] == before[body] + 1  # unfiltered: null-date bill counts
+    windowed = {
+        r["name"]: r["bill_count"]
+        for r in list_committees(indexed_db, year_from=1900, year_to=2100)
+    }
+    assert windowed[body] == before[body]  # windowed: null-date bill excluded
+
+
 def test_list_committees_exposes_first_seen_dates(indexed_db):
     # first_bill_date / first_event_date are the earliest activity dates we
     # have in the archive for each committee — a proxy for "when did this

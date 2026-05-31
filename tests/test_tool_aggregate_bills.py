@@ -36,6 +36,21 @@ def test_aggregate_bills_rejects_unknown_group_by(indexed_db):
         aggregate_bills(indexed_db, group_by=["nonexistent"])
 
 
+def test_aggregate_bills_intro_year_excludes_null_intro_date(indexed_db):
+    """A bill with no intro_date can't be bucketed into a year — it must not
+    produce a spurious {'intro_year': None} group, and every intro_year must
+    stay an int."""
+    indexed_db.execute(
+        "INSERT INTO bills (id, file, intro_date, path) VALUES (?, ?, NULL, ?)",
+        (980001, "Int 8888-2024", "bills/nulldate.json"),
+    )
+    indexed_db.commit()
+    rows = aggregate_bills(indexed_db, group_by=["intro_year"])
+    assert rows
+    assert all(r["intro_year"] is not None for r in rows)
+    assert all(isinstance(r["intro_year"], int) for r in rows)
+
+
 def test_aggregate_bills_year_to_includes_dec_31(indexed_db):
     """A bill introduced 2024-12-31 (stored as a full ISO timestamp) must be
     counted by year_to=2024. Old code compared against the date-only string

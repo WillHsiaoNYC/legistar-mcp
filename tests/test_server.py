@@ -31,6 +31,22 @@ def test_make_server_fails_fast_when_db_env_missing(monkeypatch):
         make_server()
 
 
+def test_group_by_literals_match_tool_allowed_dimensions():
+    """The MCP-facing Literal types must stay in lockstep with the dimensions
+    each aggregate tool actually accepts. If someone adds a dimension to one
+    side only, the schema advertised to clients diverges from what the runtime
+    allows — this catches that desync at test time instead of at call time.
+    """
+    from typing import get_args
+
+    from legistar_mcp.server import EventGroupByDim, GroupByDim
+    from legistar_mcp.tools.bills import _BILL_DIM_EXPRS
+    from legistar_mcp.tools.events import _EVENT_DIM_EXPRS
+
+    assert set(get_args(GroupByDim)) == set(_BILL_DIM_EXPRS)
+    assert set(get_args(EventGroupByDim)) == set(_EVENT_DIM_EXPRS)
+
+
 def test_server_module_exposes_db_lock():
     """Tools must serialize on `_db_lock` to be safe under any future
     multi-threaded FastMCP transport. Catches accidental removal of the lock

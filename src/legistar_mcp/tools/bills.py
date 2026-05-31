@@ -4,6 +4,7 @@ from pathlib import Path
 from sqlite3 import Connection
 
 from ..agency import resolve_to_fts_query
+from ._aggregate import fts_join, run_aggregate, year_window
 from ._snippet import _archive_root, _build_snippet, _extract_phrases, _get_agencies
 
 # Fields searched for snippet context. Matches the FTS column set, with
@@ -45,24 +46,16 @@ def search_bills(
 
     where: list[str] = []
     params: list = []
-    join = ""
+    joins: list[str] = []
 
     if query:
-        join = (
-            " JOIN bills_fts_map m ON bills.id = m.bill_id"
-            " JOIN bills_fts f ON m.fts_rowid = f.rowid"
-        )
-        where.append("bills_fts MATCH ?")
+        jc, match = fts_join("bills", "bill_id")
+        joins += jc
+        where.append(match)
         params.append(query)
-    if year_from:
-        where.append("bills.intro_date >= ?")
-        params.append(f"{year_from}-01-01")
-    if year_to:
-        # intro_date stores full ISO timestamps like "2024-12-31T00:00:00Z";
-        # a date-only inclusive upper bound would lex-exclude Dec 31 entries.
-        # Use the first day of the next year as an exclusive upper bound.
-        where.append("bills.intro_date < ?")
-        params.append(f"{year_to + 1}-01-01")
+    yclauses, yparams = year_window("bills.intro_date", year_from, year_to)
+    where += yclauses
+    params += yparams
     if status:
         where.append("bills.status_name = ?")
         params.append(status)
@@ -73,15 +66,17 @@ def search_bills(
         where.append("bills.body_name = ?")
         params.append(committee)
     if sponsor_slug:
-        join += " JOIN sponsors s ON bills.id = s.bill_id"
+        joins.append("JOIN sponsors s ON bills.id = s.bill_id")
         where.append("s.person_slug = ?")
         params.append(sponsor_slug)
 
     sql = (
         "SELECT DISTINCT bills.id, bills.guid, bills.file, bills.title, bills.summary, "
         "bills.status_name, bills.type_name, bills.body_name, bills.intro_date "
-        "FROM bills" + join
+        "FROM bills"
     )
+    if joins:
+        sql += " " + " ".join(joins)
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY bills.intro_date DESC LIMIT ?"
@@ -144,9 +139,18 @@ def get_bill(
     return bill
 
 
-_ALLOWED_GROUP_BY = {
-    "status_name", "type_name", "body_name", "sponsor_slug", "intro_year",
+# intro_year cast to INTEGER so callers don't get string years that sort
+# lexically. sponsor_slug requires the sponsors LEFT JOIN added below.
+_BILL_DIM_EXPRS = {
+    "status_name": "bills.status_name",
+    "type_name": "bills.type_name",
+    "body_name": "bills.body_name",
+    "sponsor_slug": "s.person_slug",
+    "intro_year": "CAST(substr(bills.intro_date, 1, 4) AS INTEGER)",
 }
+# intro_year is undefined for a NULL intro_date — exclude those rows so callers
+# never get a spurious {'intro_year': None} bucket.
+_BILL_NON_NULL_COLS = {"intro_year": "bills.intro_date"}
 
 
 def aggregate_bills(
@@ -164,50 +168,26 @@ def aggregate_bills(
     """Group bills by the requested dimensions and return per-group counts.
 
     Allowed group_by values: status_name, type_name, body_name, sponsor_slug,
-    intro_year. Filters mirror search_bills (year/agency/status/etc.).
+    intro_year. Filters mirror search_bills (year/agency/status/etc.). Shares
+    its query engine with aggregate_events (see tools/_aggregate.run_aggregate).
 
     Note on interactions: passing sponsor_slug as both a filter and a
     group_by dimension will produce a single-row aggregate (filtered to that
     one slug). Passing agency triggers an FTS5 join that may slow large
     aggregations; bound results with `limit`.
     """
-    if not group_by:
-        raise ValueError("group_by must contain at least one dimension")
-    for g in group_by:
-        if g not in _ALLOWED_GROUP_BY:
-            raise ValueError(
-                f"unsupported group_by dimension: {g!r}. "
-                f"Allowed: {sorted(_ALLOWED_GROUP_BY)}"
-            )
-
-    # Expression per dimension. intro_year cast to INTEGER so callers don't
-    # get string years that sort lexically.
-    expr = {
-        "status_name": "bills.status_name",
-        "type_name": "bills.type_name",
-        "body_name": "bills.body_name",
-        "sponsor_slug": "s.person_slug",
-        "intro_year": "CAST(substr(bills.intro_date, 1, 4) AS INTEGER)",
-    }
-    select_cols = [f"{expr[g]} AS {g}" for g in group_by]
-
     where, params, joins = [], [], []
     if "sponsor_slug" in group_by:
         joins.append("LEFT JOIN sponsors s ON bills.id = s.bill_id")
     if agency:
         query = resolve_to_fts_query(agency, _get_agencies())
-        joins.append("JOIN bills_fts_map m ON bills.id = m.bill_id")
-        joins.append("JOIN bills_fts f ON m.fts_rowid = f.rowid")
-        where.append("bills_fts MATCH ?")
+        jc, match = fts_join("bills", "bill_id")
+        joins += jc
+        where.append(match)
         params.append(query)
-    if year_from:
-        where.append("bills.intro_date >= ?")
-        params.append(f"{year_from}-01-01")
-    if year_to:
-        # See search_bills above — exclusive upper bound by next-year-Jan-1
-        # so Dec 31 ISO timestamps aren't lex-excluded.
-        where.append("bills.intro_date < ?")
-        params.append(f"{year_to + 1}-01-01")
+    yclauses, yparams = year_window("bills.intro_date", year_from, year_to)
+    where += yclauses
+    params += yparams
     if status:
         where.append("bills.status_name = ?")
         params.append(status)
@@ -223,18 +203,17 @@ def aggregate_bills(
         where.append("s.person_slug = ?")
         params.append(sponsor_slug)
 
-    sql = (
-        f"SELECT {', '.join(select_cols)}, COUNT(DISTINCT bills.id) AS count "
-        f"FROM bills {' '.join(joins)}"
+    return run_aggregate(
+        conn,
+        table="bills",
+        dim_exprs=_BILL_DIM_EXPRS,
+        group_by=group_by,
+        joins=joins,
+        where=where,
+        params=params,
+        limit=limit,
+        non_null_cols=_BILL_NON_NULL_COLS,
     )
-    if where:
-        sql += " WHERE " + " AND ".join(where)
-    sql += f" GROUP BY {', '.join(group_by)}"
-    sql += " ORDER BY count DESC, " + ", ".join(group_by)
-    sql += " LIMIT ?"
-    params.append(limit)
-
-    return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
 def recent_bills(

@@ -5,6 +5,7 @@ from sqlite3 import Connection
 
 from .._db_utils import _check_table_populated
 from ..agency import resolve_to_fts_query
+from ._aggregate import date_upper_bound, fts_join, run_aggregate
 from ._snippet import _archive_root, _build_snippet, _extract_phrases, _get_agencies
 from .bills import _legistar_url as _legistar_url_bill
 
@@ -43,29 +44,32 @@ def search_events(
 
     where: list[str] = []
     params: list = []
-    join = ""
+    joins: list[str] = []
 
     if query:
-        join = (
-            " JOIN events_fts_map m ON events.id = m.event_id"
-            " JOIN events_fts f ON m.fts_rowid = f.rowid"
-        )
-        where.append("events_fts MATCH ?")
+        jc, match = fts_join("events", "event_id")
+        joins += jc
+        where.append(match)
         params.append(query)
     if date_from:
         where.append("events.date >= ?")
         params.append(date_from)
     if date_to:
-        where.append("events.date <= ?")
-        params.append(date_to)
+        # date stores full ISO timestamps; a bare YYYY-MM-DD covers the whole
+        # day so date_to='2024-08-15' includes "2024-08-15T13:30:00-04:00".
+        clause, param = date_upper_bound("events.date", date_to)
+        where.append(clause)
+        params.append(param)
     if committee:
         where.append("events.body_name = ?")
         params.append(committee)
 
     sql = (
         "SELECT DISTINCT events.id, events.insite_url, events.body_name, events.date, events.location "
-        "FROM events" + join
+        "FROM events"
     )
+    if joins:
+        sql += " " + " ".join(joins)
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY events.date DESC LIMIT ?"
@@ -203,7 +207,14 @@ def get_bill_hearings(
     return rows
 
 
-_EVENT_ALLOWED_GROUP_BY = {"body_name", "event_year", "event_month"}
+_EVENT_DIM_EXPRS = {
+    "body_name": "events.body_name",
+    "event_year": "CAST(substr(events.date, 1, 4) AS INTEGER)",
+    "event_month": "substr(events.date, 1, 7)",
+}
+# event_year / event_month are undefined for a NULL date — exclude those rows
+# so callers never get a spurious {'event_year': None} bucket.
+_EVENT_NON_NULL_COLS = {"event_year": "events.date", "event_month": "events.date"}
 
 
 def aggregate_events(
@@ -218,60 +229,43 @@ def aggregate_events(
     """Group events by one or more dimensions and return per-group counts.
 
     Allowed group_by values: body_name, event_year, event_month. Filters mirror
-    search_events (date_from/date_to/committee/agency). Mirror of
-    aggregate_bills for the events table — useful for answering "which
-    committees held the most hearings in <year>?" in one round-trip.
+    search_events (date_from/date_to/committee/agency). Shares its query engine
+    with aggregate_bills (see tools/_aggregate.run_aggregate) — useful for
+    answering "which committees held the most hearings in <year>?" in one
+    round-trip.
 
-    Date comparison uses lex order on stored ISO timestamps; pass full-day
-    strings for date_to with care (matches search_events semantics).
+    A bare YYYY-MM-DD date_to covers the whole day (events store full ISO
+    timestamps), so date_to='2024-12-31' counts every hearing on Dec 31.
     """
-    if not group_by:
-        raise ValueError("group_by must contain at least one dimension")
-    for g in group_by:
-        if g not in _EVENT_ALLOWED_GROUP_BY:
-            raise ValueError(
-                f"unsupported group_by dimension: {g!r}. "
-                f"Allowed: {sorted(_EVENT_ALLOWED_GROUP_BY)}"
-            )
-
-    expr = {
-        "body_name": "events.body_name",
-        "event_year": "CAST(substr(events.date, 1, 4) AS INTEGER)",
-        "event_month": "substr(events.date, 1, 7)",
-    }
-    select_cols = [f"{expr[g]} AS {g}" for g in group_by]
-
     where, params, joins = [], [], []
     if agency:
         query = resolve_to_fts_query(agency, _get_agencies())
-        joins.append("JOIN events_fts_map m ON events.id = m.event_id")
-        joins.append("JOIN events_fts f ON m.fts_rowid = f.rowid")
-        where.append("events_fts MATCH ?")
+        jc, match = fts_join("events", "event_id")
+        joins += jc
+        where.append(match)
         params.append(query)
     if date_from:
         where.append("events.date >= ?")
         params.append(date_from)
     if date_to:
-        where.append("events.date <= ?")
-        params.append(date_to)
+        clause, param = date_upper_bound("events.date", date_to)
+        where.append(clause)
+        params.append(param)
     if committee:
         where.append("events.body_name = ?")
         params.append(committee)
 
-    # COUNT(DISTINCT) because agency mode joins events_fts_map, which
-    # produces one row per matching event item — without DISTINCT a
-    # council meeting with 5 NYPD-mentioning items would be counted 5x.
-    sql = (
-        f"SELECT {', '.join(select_cols)}, COUNT(DISTINCT events.id) AS count "
-        f"FROM events {' '.join(joins)}"
+    return run_aggregate(
+        conn,
+        table="events",
+        dim_exprs=_EVENT_DIM_EXPRS,
+        group_by=group_by,
+        joins=joins,
+        where=where,
+        params=params,
+        limit=limit,
+        non_null_cols=_EVENT_NON_NULL_COLS,
     )
-    if where:
-        sql += " WHERE " + " AND ".join(where)
-    sql += f" GROUP BY {', '.join(group_by)}"
-    sql += " ORDER BY count DESC, " + ", ".join(group_by)
-    sql += " LIMIT ?"
-    params.append(limit)
-    return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
 def get_event_bills(conn: Connection, event_id: int) -> list[dict]:

@@ -76,6 +76,19 @@ def test_get_voting_record_year_to_includes_dec_31(indexed_db):
     assert any(r["vote_date"] == "2024-12-31T23:59:59Z" for r in results)
 
 
+def test_get_voting_record_year_zero_is_a_real_bound(indexed_db):
+    """get_voting_record must share year_window()'s semantics: year bounds use
+    `is not None`, so year_to=0 means "through year 0" (nothing matches) —
+    not "no filter". The old hand-rolled truthiness check silently ignored
+    the bound and returned every vote."""
+    row = indexed_db.execute(
+        "SELECT person_slug FROM votes WHERE bill_id = 68628 LIMIT 1"
+    ).fetchone()
+    slug = row["person_slug"]
+    assert get_voting_record(indexed_db, slug=slug)  # guard: slug has votes
+    assert get_voting_record(indexed_db, slug=slug, year_to=0) == []
+
+
 def test_get_voting_record_raises_stale_index_when_votes_empty(indexed_db):
     # Simulate post-upgrade pre-`--full` state: schema rolled back below
     # SCHEMA_VERSION. user_version is now the source of truth for staleness.

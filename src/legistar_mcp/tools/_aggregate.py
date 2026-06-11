@@ -50,35 +50,52 @@ def year_window(
     The upper bound is an *exclusive* next-year-Jan-1 (`< {year_to+1}-01-01`)
     so a Dec-31 value stored as a full ISO timestamp ("2024-12-31T23:59:59Z")
     isn't lex-excluded. Uses `is not None` (not truthiness) so year 0 — however
-    nonsensical — is never silently dropped. Returns (clauses, params) to splice
-    into a WHERE list.
+    nonsensical — is never silently dropped. Years are zero-padded to 4 digits:
+    unpadded "999-01-01" lex-sorts AFTER "2024-..." and would silently exclude
+    everything. year_to >= 9999 emits no upper clause at all — no ISO date can
+    exceed it, and "10000-01-01" lex-sorts BEFORE every real date. Returns
+    (clauses, params) to splice into a WHERE list.
     """
     clauses: list[str] = []
     params: list = []
     if year_from is not None:
         clauses.append(f"{col} >= ?")
-        params.append(f"{year_from}-01-01")
-    if year_to is not None:
+        params.append(f"{year_from:04d}-01-01")
+    if year_to is not None and year_to < 9999:
         clauses.append(f"{col} < ?")
-        params.append(f"{year_to + 1}-01-01")
+        params.append(f"{year_to + 1:04d}-01-01")
     return clauses, params
 
 
 def date_upper_bound(col: str, date_to: str) -> tuple[str, str]:
     """Inclusive `date_to` predicate for a column storing full ISO timestamps.
 
-    A bare ``YYYY-MM-DD`` is meant to cover the *whole* day, so it becomes an
-    exclusive next-day bound (`col < {date_to + 1 day}`) — otherwise
-    `col <= '2024-08-15'` lex-excludes same-day rows like
-    "2024-08-15T13:30:00-04:00". A full timestamp (or any non-date string) is
-    compared directly with `<=`. Returns (clause, param).
+    A bare prefix covers the *whole* period it names, via an exclusive
+    next-period bound — otherwise the lex compare excludes the very rows the
+    caller asked for (`col <= '2024-08-15'` drops "2024-08-15T13:30:00-04:00";
+    `col <= '2024-08'` drops all of August):
+
+    - ``YYYY-MM-DD`` → `col < {next day}`
+    - ``YYYY-MM``    → `col < {first of next month}`
+    - ``YYYY``       → `col < {next Jan 1}`
+
+    A full timestamp, a malformed string, or a bound past year 9999 (where no
+    next-period boundary is representable — date.max + 1 day raises
+    OverflowError, not ValueError) is compared directly with `<=`.
+    Returns (clause, param).
     """
-    if len(date_to) == 10:
-        try:
+    try:
+        if len(date_to) == 10:
             nxt = _dt.date.fromisoformat(date_to) + _dt.timedelta(days=1)
             return f"{col} < ?", nxt.isoformat()
-        except ValueError:
-            pass
+        if len(date_to) == 7:
+            first = _dt.date.fromisoformat(date_to + "-01")
+            nxt = (first.replace(day=28) + _dt.timedelta(days=4)).replace(day=1)
+            return f"{col} < ?", nxt.isoformat()
+        if len(date_to) == 4 and date_to.isdigit() and int(date_to) < 9999:
+            return f"{col} < ?", f"{int(date_to) + 1:04d}-01-01"
+    except (ValueError, OverflowError):
+        pass
     return f"{col} <= ?", date_to
 
 
@@ -103,9 +120,11 @@ def run_aggregate(
     dimension is grouped on, rows with a NULL source are excluded, so callers
     never receive a spurious `{dim: None}` bucket.
 
-    Counts `COUNT(DISTINCT {table}.id)` because agency mode joins `{table}_fts_map`
-    and fans one base row out into one row per matching FTS item. Results are
-    ordered by count desc with the grouping columns as a stable tie-break.
+    Joins fan one base row out into many (FTS map: one per matching FTS item;
+    sponsors: one per sponsor), so any join forces `COUNT(DISTINCT {table}.id)`.
+    The join-free path counts plain rows — no fan-out is possible and COUNT(*)
+    lets SQLite skip per-group distinct tracking. Results are ordered by count
+    desc with the grouping columns as a stable tie-break.
     """
     validate_group_by(group_by, set(dim_exprs))
     where = list(where)  # local copy — never mutate the caller's list
@@ -113,12 +132,11 @@ def run_aggregate(
         for g in group_by:
             col = non_null_cols.get(g)
             if col:
-                clause = f"{col} IS NOT NULL"
-                if clause not in where:
-                    where.append(clause)
+                where.append(f"{col} IS NOT NULL")
+    count_expr = f"COUNT(DISTINCT {table}.id)" if joins else "COUNT(*)"
     select_cols = [f"{dim_exprs[g]} AS {g}" for g in group_by]
     sql = (
-        f"SELECT {', '.join(select_cols)}, COUNT(DISTINCT {table}.id) AS count "
+        f"SELECT {', '.join(select_cols)}, {count_expr} AS count "
         f"FROM {table}"
     )
     if joins:

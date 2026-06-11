@@ -29,25 +29,23 @@ def _legistar_url(bill_id: int | None) -> str | None:
     return f"https://legistar.council.nyc.gov/gateway.aspx?m=l&id=/matter.aspx?key={bill_id}"
 
 
-def search_bills(
-    conn: Connection,
-    query: str | None = None,
-    agency: str | None = None,
-    year_from: int | None = None,
-    year_to: int | None = None,
-    status: str | None = None,
-    type: str | None = None,
-    committee: str | None = None,
-    sponsor_slug: str | None = None,
-    limit: int = 20,
-) -> list[dict]:
-    if agency:
-        query = resolve_to_fts_query(agency, _get_agencies())
-
+def _bill_filters(
+    query: str | None,
+    year_from: int | None,
+    year_to: int | None,
+    status: str | None,
+    type: str | None,
+    committee: str | None,
+) -> tuple[list[str], list[str], list]:
+    """JOIN/WHERE/params shared by search_bills and aggregate_bills so a
+    filter fix lands in both. The sponsor_slug filter stays at the call sites:
+    its join flavor differs (search wants INNER; aggregate must reuse the
+    LEFT JOIN it adds for sponsor_slug grouping). Returns (joins, where,
+    params) with where and params in matching order.
+    """
+    joins: list[str] = []
     where: list[str] = []
     params: list = []
-    joins: list[str] = []
-
     if query:
         jc, match = fts_join("bills", "bill_id")
         joins += jc
@@ -65,6 +63,25 @@ def search_bills(
     if committee:
         where.append("bills.body_name = ?")
         params.append(committee)
+    return joins, where, params
+
+
+def search_bills(
+    conn: Connection,
+    query: str | None = None,
+    agency: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    status: str | None = None,
+    type: str | None = None,
+    committee: str | None = None,
+    sponsor_slug: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    if agency:
+        query = resolve_to_fts_query(agency, _get_agencies())
+
+    joins, where, params = _bill_filters(query, year_from, year_to, status, type, committee)
     if sponsor_slug:
         joins.append("JOIN sponsors s ON bills.id = s.bill_id")
         where.append("s.person_slug = ?")
@@ -148,9 +165,13 @@ _BILL_DIM_EXPRS = {
     "sponsor_slug": "s.person_slug",
     "intro_year": "CAST(substr(bills.intro_date, 1, 4) AS INTEGER)",
 }
-# intro_year is undefined for a NULL intro_date — exclude those rows so callers
-# never get a spurious {'intro_year': None} bucket.
-_BILL_NON_NULL_COLS = {"intro_year": "bills.intro_date"}
+# intro_year is undefined for a NULL intro_date, and sponsor_slug is NULL for
+# every unsponsored bill (the LEFT JOIN makes that structural) — exclude those
+# rows so callers never get a spurious {dim: None} bucket.
+_BILL_NON_NULL_COLS = {
+    "intro_year": "bills.intro_date",
+    "sponsor_slug": "s.person_slug",
+}
 
 
 def aggregate_bills(
@@ -176,30 +197,11 @@ def aggregate_bills(
     one slug). Passing agency triggers an FTS5 join that may slow large
     aggregations; bound results with `limit`.
     """
-    where, params, joins = [], [], []
-    if "sponsor_slug" in group_by:
+    query = resolve_to_fts_query(agency, _get_agencies()) if agency else None
+    joins, where, params = _bill_filters(query, year_from, year_to, status, type, committee)
+    if "sponsor_slug" in group_by or sponsor_slug:
         joins.append("LEFT JOIN sponsors s ON bills.id = s.bill_id")
-    if agency:
-        query = resolve_to_fts_query(agency, _get_agencies())
-        jc, match = fts_join("bills", "bill_id")
-        joins += jc
-        where.append(match)
-        params.append(query)
-    yclauses, yparams = year_window("bills.intro_date", year_from, year_to)
-    where += yclauses
-    params += yparams
-    if status:
-        where.append("bills.status_name = ?")
-        params.append(status)
-    if type:
-        where.append("bills.type_name = ?")
-        params.append(type)
-    if committee:
-        where.append("bills.body_name = ?")
-        params.append(committee)
     if sponsor_slug:
-        if "sponsor_slug" not in group_by:
-            joins.append("LEFT JOIN sponsors s ON bills.id = s.bill_id")
         where.append("s.person_slug = ?")
         params.append(sponsor_slug)
 

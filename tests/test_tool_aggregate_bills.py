@@ -51,6 +51,30 @@ def test_aggregate_bills_intro_year_excludes_null_intro_date(indexed_db):
     assert all(isinstance(r["intro_year"], int) for r in rows)
 
 
+def test_aggregate_bills_sponsor_slug_excludes_unsponsored_bills(indexed_db):
+    """A bill with no sponsors rows has no slug to bucket under — it must not
+    produce a spurious {'sponsor_slug': None} group (same rationale as the
+    intro_year NULL-date exclusion above; the LEFT JOIN makes NULLs
+    structural, not data-quality)."""
+    indexed_db.execute(
+        "INSERT INTO bills (id, file, intro_date, path) VALUES (?, ?, ?, ?)",
+        (970001, "Int 7777-2024", "2024-05-01T00:00:00Z", "bills/nosponsor.json"),
+    )
+    indexed_db.commit()
+    rows = aggregate_bills(indexed_db, group_by=["sponsor_slug"])
+    assert rows
+    assert all(r["sponsor_slug"] is not None for r in rows)
+
+
+def test_aggregate_bills_year_to_9999_returns_everything(indexed_db):
+    """year_to=9999 is a natural 'no upper bound' sentinel. The unpadded
+    boundary '10000-01-01' lex-sorts before every real date and silently
+    returned zero rows."""
+    unfiltered = aggregate_bills(indexed_db, group_by=["intro_year"])
+    assert unfiltered
+    assert aggregate_bills(indexed_db, group_by=["intro_year"], year_to=9999) == unfiltered
+
+
 def test_aggregate_bills_year_to_includes_dec_31(indexed_db):
     """A bill introduced 2024-12-31 (stored as a full ISO timestamp) must be
     counted by year_to=2024. Old code compared against the date-only string

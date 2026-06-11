@@ -79,7 +79,32 @@ def test_year_window_year_zero_is_not_treated_as_missing():
     # A truthy check (`if year_from:`) would drop year 0; we use `is not None`.
     clauses, params = year_window("d", 0, None)
     assert clauses == ["d >= ?"]
-    assert params == ["0-01-01"]
+    assert params == ["0000-01-01"]
+
+
+def test_year_window_pads_years_below_1000():
+    # Unpadded "999-01-01" lex-sorts AFTER every real "19xx"/"20xx" date
+    # ('9' > '2'), silently excluding all rows. Years must be zero-padded.
+    clauses, params = year_window("d", 999, None)
+    assert params == ["0999-01-01"]
+
+
+def test_year_window_to_pads_next_year_boundary():
+    clauses, params = year_window("d", None, 998)
+    assert clauses == ["d < ?"]
+    assert params == ["0999-01-01"]
+
+
+def test_year_window_year_to_9999_means_unbounded():
+    # There is no representable next-year boundary above 9999, and no ISO
+    # date can exceed it — emit no upper clause instead of the lex-broken
+    # "10000-01-01" (which sorts BEFORE "2024-..." and excludes everything).
+    clauses, params = year_window("d", None, 9999)
+    assert clauses == []
+    assert params == []
+    clauses, params = year_window("d", 2020, 9999)
+    assert clauses == ["d >= ?"]
+    assert params == ["2020-01-01"]
 
 
 # --- date_upper_bound -----------------------------------------------------
@@ -111,3 +136,45 @@ def test_date_upper_bound_non_date_ten_chars_falls_back_to_lte():
     clause, param = date_upper_bound("events.date", "2024-13-99")
     assert clause == "events.date <= ?"
     assert param == "2024-13-99"
+
+
+def test_date_upper_bound_max_iso_date_does_not_crash():
+    # date.max + 1 day raises OverflowError (NOT ValueError) — a bare
+    # `except ValueError` turns the natural "no upper bound" sentinel into
+    # a tool crash. Must fall back to direct compare instead.
+    clause, param = date_upper_bound("events.date", "9999-12-31")
+    assert clause == "events.date <= ?"
+    assert param == "9999-12-31"
+
+
+def test_date_upper_bound_month_prefix_covers_whole_month():
+    # date_to='2024-08' means "through August"; the lex fallback
+    # `<= '2024-08'` would exclude every timestamp IN August.
+    clause, param = date_upper_bound("events.date", "2024-08")
+    assert clause == "events.date < ?"
+    assert param == "2024-09-01"
+
+
+def test_date_upper_bound_december_prefix_rolls_to_next_year():
+    clause, param = date_upper_bound("events.date", "2024-12")
+    assert clause == "events.date < ?"
+    assert param == "2025-01-01"
+
+
+def test_date_upper_bound_year_prefix_covers_whole_year():
+    clause, param = date_upper_bound("events.date", "2024")
+    assert clause == "events.date < ?"
+    assert param == "2025-01-01"
+
+
+def test_date_upper_bound_non_month_seven_chars_falls_back_to_lte():
+    clause, param = date_upper_bound("events.date", "2024-13")
+    assert clause == "events.date <= ?"
+    assert param == "2024-13"
+
+
+def test_date_upper_bound_year_9999_prefix_falls_back_to_lte():
+    # No representable next-year boundary — direct compare, no crash.
+    clause, param = date_upper_bound("events.date", "9999")
+    assert clause == "events.date <= ?"
+    assert param == "9999"

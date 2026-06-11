@@ -1,6 +1,7 @@
 from sqlite3 import Connection
 
 from .._db_utils import _check_table_populated
+from ._aggregate import year_window
 
 
 def co_sponsors(
@@ -43,14 +44,10 @@ def get_voting_record(
         "WHERE v.person_slug = ?"
     )
     params: list = [slug]
-    if year_from:
-        sql += " AND v.vote_date >= ?"
-        params.append(f"{year_from}-01-01")
-    if year_to:
-        # v.vote_date stores full ISO timestamps; a date-only inclusive upper
-        # would lex-exclude Dec 31 votes. Use next-year-Jan-1 exclusive.
-        sql += " AND v.vote_date < ?"
-        params.append(f"{year_to + 1}-01-01")
+    yclauses, yparams = year_window("v.vote_date", year_from, year_to)
+    for clause in yclauses:
+        sql += f" AND {clause}"
+    params += yparams
     if vote_value:
         sql += " AND v.vote_value = ?"
         params.append(vote_value)

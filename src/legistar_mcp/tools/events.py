@@ -30,22 +30,19 @@ _MAX_MENTIONS_PER_EVENT = 5
 # already ships the correct link; we just store and surface it.
 
 
-def search_events(
-    conn: Connection,
-    query: str | None = None,
-    agency: str | None = None,
-    date_from: str | None = None,
-    date_to: str | None = None,
-    committee: str | None = None,
-    limit: int = 20,
-) -> list[dict]:
-    if agency:
-        query = resolve_to_fts_query(agency, _get_agencies())
-
+def _event_filters(
+    query: str | None,
+    date_from: str | None,
+    date_to: str | None,
+    committee: str | None,
+) -> tuple[list[str], list[str], list]:
+    """JOIN/WHERE/params shared by search_events and aggregate_events so a
+    filter fix lands in both. Returns (joins, where, params) with where and
+    params in matching order.
+    """
+    joins: list[str] = []
     where: list[str] = []
     params: list = []
-    joins: list[str] = []
-
     if query:
         jc, match = fts_join("events", "event_id")
         joins += jc
@@ -63,6 +60,22 @@ def search_events(
     if committee:
         where.append("events.body_name = ?")
         params.append(committee)
+    return joins, where, params
+
+
+def search_events(
+    conn: Connection,
+    query: str | None = None,
+    agency: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    committee: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    if agency:
+        query = resolve_to_fts_query(agency, _get_agencies())
+
+    joins, where, params = _event_filters(query, date_from, date_to, committee)
 
     sql = (
         "SELECT DISTINCT events.id, events.insite_url, events.body_name, events.date, events.location "
@@ -142,14 +155,14 @@ def upcoming_events(
 ) -> list[dict]:
     """Events in the next `days` days. Same row shape as search_events."""
     today = _dt.date.today().isoformat()
-    # Exclusive upper bound: cutoff is the first day OUTSIDE the window, so
-    # events.date values that start with the last in-window day (full ISO
-    # timestamps like "2024-08-15T13:30:00-04:00") still match. A lex compare
-    # against a date-only cutoff would otherwise drop events on the cutoff day.
-    cutoff = (_dt.date.today() + _dt.timedelta(days=days + 1)).isoformat()
+    # The last in-window day is today + days; date_upper_bound turns it into
+    # the exclusive next-day bound so full ISO timestamps on that day (e.g.
+    # "2024-08-15T13:30:00-04:00") still match the lex compare.
+    last_day = (_dt.date.today() + _dt.timedelta(days=days)).isoformat()
+    clause, cutoff = date_upper_bound("events.date", last_day)
     sql = (
         "SELECT events.id, events.insite_url, events.body_name, events.date, events.location "
-        "FROM events WHERE events.date >= ? AND events.date < ?"
+        f"FROM events WHERE events.date >= ? AND {clause}"
     )
     params: list = [today, cutoff]
     if committee:
@@ -237,23 +250,8 @@ def aggregate_events(
     A bare YYYY-MM-DD date_to covers the whole day (events store full ISO
     timestamps), so date_to='2024-12-31' counts every hearing on Dec 31.
     """
-    where, params, joins = [], [], []
-    if agency:
-        query = resolve_to_fts_query(agency, _get_agencies())
-        jc, match = fts_join("events", "event_id")
-        joins += jc
-        where.append(match)
-        params.append(query)
-    if date_from:
-        where.append("events.date >= ?")
-        params.append(date_from)
-    if date_to:
-        clause, param = date_upper_bound("events.date", date_to)
-        where.append(clause)
-        params.append(param)
-    if committee:
-        where.append("events.body_name = ?")
-        params.append(committee)
+    query = resolve_to_fts_query(agency, _get_agencies()) if agency else None
+    joins, where, params = _event_filters(query, date_from, date_to, committee)
 
     return run_aggregate(
         conn,

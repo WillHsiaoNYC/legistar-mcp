@@ -96,7 +96,7 @@ def vote_breakdown(
     Identify the bill by numeric `bill_id` OR by `file` (e.g. 'Int 0153-2022');
     an unknown `file` raises a guided ValueError instead of an empty result.
 
-    Returns rows with seven columns:
+    Each row in the envelope's `results` has seven columns:
       - person_slug
       - full_name (NULL if no people row indexed)
       - vote_value (e.g. 'Affirmative', 'Negative', 'Abstain')

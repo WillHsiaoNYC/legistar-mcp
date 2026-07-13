@@ -47,6 +47,12 @@ from .tools.vocab import list_vocabulary as _list_vocabulary
 # clients label the tools and skip write-confirmation prompts.
 _RO = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 
+# Reusable param annotations for the byte-identical paging params — a wording
+# tweak lands once instead of at 8 call sites. Tools with tailored paging or
+# limit text (e.g. search_bills' offset, the 1-1000 limits) stay inline.
+_Offset = Annotated[int, Field(description="Rows to skip for paging.")]
+_Limit200 = Annotated[int, Field(description="Max results, clamped to 1-200.")]
+
 # MCP-exposed enum constraints — keep in sync with tools/vocab.py
 # `_ALLOWED_FIELDS` and tools/bills.py `aggregate_bills` group_by validation.
 # Surfacing these as Literal lets FastMCP's JSON-schema generator publish the
@@ -204,7 +210,7 @@ def make_server() -> FastMCP:
                 )
             ),
         ] = None,
-        limit: Annotated[int, Field(description="Max results, clamped to 1-200.")] = 20,
+        limit: _Limit200 = 20,
         offset: Annotated[
             int,
             Field(description="Rows to skip for paging; use with `total` from a prior call."),
@@ -293,8 +299,8 @@ def make_server() -> FastMCP:
             bool,
             Field(description="True = only currently serving members."),
         ] = False,
-        limit: Annotated[int, Field(description="Max results, clamped to 1-200.")] = 20,
-        offset: Annotated[int, Field(description="Rows to skip for paging.")] = 0,
+        limit: _Limit200 = 20,
+        offset: _Offset = 0,
     ) -> dict:
         """Search council members. Returns {results, total, offset, truncated}; each result has slug, full_name, is_active, start/end dates. Slugs feed get_person, search_bills(sponsor_slug), get_voting_record, co_sponsors."""
         return _search_people(
@@ -355,8 +361,8 @@ def make_server() -> FastMCP:
                 )
             ),
         ] = None,
-        limit: Annotated[int, Field(description="Max results, clamped to 1-200.")] = 20,
-        offset: Annotated[int, Field(description="Rows to skip for paging.")] = 0,
+        limit: _Limit200 = 20,
+        offset: _Offset = 0,
     ) -> dict:
         """Search committee hearings and Council meetings. Returns {results, total, offset, truncated}; each result has id, body_name, date, location, legistar_url, and `mentions` when agency/query is set."""
         return _search_events(
@@ -586,8 +592,8 @@ def make_server() -> FastMCP:
             str | None,
             Field(description="Exact bill type, case-insensitive."),
         ] = None,
-        limit: Annotated[int, Field(description="Max results, clamped to 1-200.")] = 20,
-        offset: Annotated[int, Field(description="Rows to skip for paging.")] = 0,
+        limit: _Limit200 = 20,
+        offset: _Offset = 0,
     ) -> dict:
         """Bills introduced in the last `days` days, newest first. Includes a `warning` field when the local index looks stale. For agency-scoped searches use search_bills(agency=…)."""
         return _recent_bills(
@@ -610,8 +616,8 @@ def make_server() -> FastMCP:
             str | None,
             Field(description="Exact committee (body) name, case-insensitive."),
         ] = None,
-        limit: Annotated[int, Field(description="Max results, clamped to 1-200.")] = 20,
-        offset: Annotated[int, Field(description="Rows to skip for paging.")] = 0,
+        limit: _Limit200 = 20,
+        offset: _Offset = 0,
     ) -> dict:
         """Events scheduled in the next `days` days, soonest first. Includes a `warning` field when the local index looks stale — a stale index can miss newly scheduled hearings."""
         return _upcoming_events(
@@ -631,8 +637,8 @@ def make_server() -> FastMCP:
                 )
             ),
         ] = 5,
-        limit: Annotated[int, Field(description="Max results, clamped to 1-200.")] = 20,
-        offset: Annotated[int, Field(description="Rows to skip for paging.")] = 0,
+        limit: _Limit200 = 20,
+        offset: _Offset = 0,
     ) -> dict:
         """Council members who most often co-sponsor bills with the given member, sorted by shared-bill count."""
         return _co_sponsors(
@@ -659,8 +665,8 @@ def make_server() -> FastMCP:
                 )
             ),
         ] = False,
-        limit: Annotated[int, Field(description="Max results, clamped to 1-200.")] = 20,
-        offset: Annotated[int, Field(description="Rows to skip for paging.")] = 0,
+        limit: _Limit200 = 20,
+        offset: _Offset = 0,
     ) -> dict:
         """Events where the given bill was on the agenda, with per-item action names. Supply `file` or `id`."""
         return _get_bill_hearings(
@@ -700,7 +706,7 @@ def make_server() -> FastMCP:
             ),
         ] = None,
         limit: Annotated[int, Field(description="Max results, clamped to 1-1000.")] = 100,
-        offset: Annotated[int, Field(description="Rows to skip for paging.")] = 0,
+        offset: _Offset = 0,
     ) -> dict:
         """Every vote the member cast, newest first, with the bill's file/title/status and the action voted on."""
         return _get_voting_record(
@@ -725,7 +731,7 @@ def make_server() -> FastMCP:
             int,
             Field(description="Max results, clamped to 1-1000. Raise for omnibus bills."),
         ] = 100,
-        offset: Annotated[int, Field(description="Rows to skip for paging.")] = 0,
+        offset: _Offset = 0,
     ) -> dict:
         """Every council member's vote on one bill across all its roll calls, newest action first. Supply `bill_id` or `file`."""
         return _vote_breakdown(conn, bill_id=bill_id, file=file, limit=limit, offset=offset)

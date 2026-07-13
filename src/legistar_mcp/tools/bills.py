@@ -103,25 +103,23 @@ def search_bills(
         where.append("s.person_slug = ?")
         params.append(sponsor_slug)
 
+    # One FROM/JOIN/WHERE fragment feeds both the COUNT and the page query so
+    # the two can never drift. Join-free counts skip the DISTINCT dedup
+    # (bills.id is the PK; mirrors run_aggregate).
+    from_jw = "FROM bills"
+    if joins:
+        from_jw += " " + " ".join(joins)
+    if where:
+        from_jw += " WHERE " + " AND ".join(where)
+
+    count_expr = "COUNT(DISTINCT bills.id)" if joins else "COUNT(*)"
+    total = conn.execute(f"SELECT {count_expr} {from_jw}", params).fetchone()[0]
+
     sql = (
         "SELECT DISTINCT bills.id, bills.guid, bills.file, bills.title, bills.summary, "
-        "bills.status_name, bills.type_name, bills.body_name, bills.intro_date "
-        "FROM bills"
+        f"bills.status_name, bills.type_name, bills.body_name, bills.intro_date {from_jw} "
+        "ORDER BY bills.intro_date DESC LIMIT ? OFFSET ?"
     )
-    if joins:
-        sql += " " + " ".join(joins)
-    if where:
-        sql += " WHERE " + " AND ".join(where)
-
-    # COUNT over the same FROM/JOIN/WHERE, before LIMIT/OFFSET are appended.
-    count_sql = "SELECT COUNT(DISTINCT bills.id) FROM bills"
-    if joins:
-        count_sql += " " + " ".join(joins)
-    if where:
-        count_sql += " WHERE " + " AND ".join(where)
-    total = conn.execute(count_sql, params).fetchone()[0]
-
-    sql += " ORDER BY bills.intro_date DESC LIMIT ? OFFSET ?"
     params += [limit, offset]
 
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]

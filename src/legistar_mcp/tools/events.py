@@ -93,24 +93,23 @@ def search_events(
 
     joins, where, params = _event_filters(fts_query, date_from, date_to, committee)
 
+    # One FROM/JOIN/WHERE fragment feeds both the COUNT and the page query so
+    # the two can never drift. Join-free counts skip the DISTINCT dedup
+    # (events.id is the PK; mirrors run_aggregate).
+    from_jw = "FROM events"
+    if joins:
+        from_jw += " " + " ".join(joins)
+    if where:
+        from_jw += " WHERE " + " AND ".join(where)
+
+    count_expr = "COUNT(DISTINCT events.id)" if joins else "COUNT(*)"
+    total = conn.execute(f"SELECT {count_expr} {from_jw}", params).fetchone()[0]
+
     sql = (
-        "SELECT DISTINCT events.id, events.insite_url, events.body_name, events.date, events.location "
-        "FROM events"
+        "SELECT DISTINCT events.id, events.insite_url, events.body_name, "
+        f"events.date, events.location {from_jw} "
+        "ORDER BY events.date DESC LIMIT ? OFFSET ?"
     )
-    if joins:
-        sql += " " + " ".join(joins)
-    if where:
-        sql += " WHERE " + " AND ".join(where)
-
-    # COUNT over the same FROM/JOIN/WHERE, before LIMIT/OFFSET are appended.
-    count_sql = "SELECT COUNT(DISTINCT events.id) FROM events"
-    if joins:
-        count_sql += " " + " ".join(joins)
-    if where:
-        count_sql += " WHERE " + " AND ".join(where)
-    total = conn.execute(count_sql, params).fetchone()[0]
-
-    sql += " ORDER BY events.date DESC LIMIT ? OFFSET ?"
     params += [limit, offset]
 
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
@@ -274,7 +273,8 @@ def aggregate_events(
     limit: int = 100,
     offset: int = 0,
 ) -> dict:
-    """Group events by one or more dimensions and return per-group counts.
+    """Group events by zero or more dimensions and return per-group counts
+    (empty group_by = one grand-total row).
 
     Allowed group_by values: body_name, event_year, event_month. Filters mirror
     search_events (date_from/date_to/committee/agency). Shares its query engine

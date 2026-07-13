@@ -113,7 +113,7 @@ Final folder layout:
 ```
 ~/legistar/
 ├── nyc_legislation/   ← archive — DO NOT delete; query-time tools read JSON from here
-└── legistar.db        ← SQLite index (~105 MB)
+└── legistar.db        ← SQLite index (~290 MB)
 ```
 
 Now [configure your AI agent](#configure-your-ai-agent) below using the per-client JSON snippets.
@@ -219,7 +219,7 @@ HEAD to catch layout or field-name changes early.
   Interpreters installed by [`uv`](https://docs.astral.sh/uv/) bundle a current
   SQLite; Linux *system* Pythons on older distros may not. uv handles the
   install — it's the only Python toolchain you need to know about.
-- **~3 GB free disk** for the archive (~2 GB) + the index (~105 MB).
+- **~3.5 GB free disk** for the archive (~2 GB full / ~700 MB shallow) + the index (~290 MB).
 - **An MCP-compatible AI client** — Claude Desktop, Claude Code, Cursor,
   Continue.dev, etc.
 
@@ -332,7 +332,8 @@ text.
 - **Agency snippets are built in Python**, not via SQLite's native `snippet()`.
   Contentless FTS5 tables (which we use to keep the DB small) return NULL
   from `snippet()`, so the server reads source JSON at query time and renders
-  snippets itself. Tradeoff: ~105 MB DB instead of ~300 MB, at the cost of
+  snippets itself. Tradeoff: the DB stores no duplicate copy of the bill
+  text (the FTS term index alone is ~290 MB), at the cost of
   per-result JSON reads and occasional empty `mentions` when porter stemming
   matched a non-literal form.
 - **`--incremental` still touches every JSON** to read `LastModified`. It's

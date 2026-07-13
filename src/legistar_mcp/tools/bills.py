@@ -63,13 +63,13 @@ def _bill_filters(
     where += yclauses
     params += yparams
     if status:
-        where.append("bills.status_name = ?")
+        where.append("bills.status_name = ? COLLATE NOCASE")
         params.append(status)
     if type:
-        where.append("bills.type_name = ?")
+        where.append("bills.type_name = ? COLLATE NOCASE")
         params.append(type)
     if committee:
-        where.append("bills.body_name = ?")
+        where.append("bills.body_name = ? COLLATE NOCASE")
         params.append(committee)
     return joins, where, params
 
@@ -251,10 +251,10 @@ def recent_bills(
     )
     params: list = [cutoff]
     if status:
-        sql += " AND bills.status_name = ?"
+        sql += " AND bills.status_name = ? COLLATE NOCASE"
         params.append(status)
     if type:
-        sql += " AND bills.type_name = ?"
+        sql += " AND bills.type_name = ? COLLATE NOCASE"
         params.append(type)
     sql += " ORDER BY bills.intro_date DESC LIMIT ?"
     params.append(limit)

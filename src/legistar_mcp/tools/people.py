@@ -14,8 +14,9 @@ def search_people(
     where: list[str] = []
     params: list = []
     if name:
-        where.append("LOWER(full_name) LIKE ?")
-        params.append(f"%{name.lower()}%")
+        for token in name.lower().split():
+            where.append("LOWER(full_name) LIKE ?")
+            params.append(f"%{token}%")
     if active_only:
         where.append("is_active = 1")
     sql = "SELECT slug, full_name, is_active, start_date, end_date FROM people"

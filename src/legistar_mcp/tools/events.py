@@ -66,7 +66,7 @@ def _event_filters(
         where.append(clause)
         params.append(param)
     if committee:
-        where.append("events.body_name = ?")
+        where.append("events.body_name = ? COLLATE NOCASE")
         params.append(committee)
     return joins, where, params
 
@@ -179,7 +179,7 @@ def upcoming_events(
     )
     params: list = [today.isoformat(), cutoff]
     if committee:
-        sql += " AND events.body_name = ?"
+        sql += " AND events.body_name = ? COLLATE NOCASE"
         params.append(committee)
     sql += " ORDER BY events.date ASC LIMIT ?"
     params.append(limit)

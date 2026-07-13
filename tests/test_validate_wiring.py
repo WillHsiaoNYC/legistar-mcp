@@ -112,3 +112,16 @@ def test_missing_archive_file_is_guided_not_traceback(indexed_db, tmp_path, fixt
     # Point the reader at a root where the indexed rel-path doesn't exist.
     with pytest.raises(ValueError, match="legistar-mcp index"):
         get_bill(indexed_db, tmp_path, file="Int 0153-2022")
+
+
+def test_filters_match_case_insensitively(indexed_db):
+    exact = search_bills(indexed_db, status="Enacted", limit=10)
+    lower = search_bills(indexed_db, status="enacted", limit=10)
+    assert [r["file"] for r in lower] == [r["file"] for r in exact]
+    assert lower, "fixture set contains an Enacted bill"
+
+
+def test_search_people_matches_across_middle_initial(indexed_db):
+    # full_name is 'Adrienne E. Adams' — a single-substring LIKE missed this.
+    hits = search_people(indexed_db, name="Adrienne Adams")
+    assert any(p["slug"] == "adrienne-e-adams" for p in hits)

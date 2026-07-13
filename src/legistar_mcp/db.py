@@ -22,15 +22,17 @@ SCHEMA_VERSION = 4
 
 
 def open_db(db_path: Path) -> sqlite3.Connection:
-    # vote_breakdown's ORDER BY uses `NULLS LAST`, which sqlite3 added in 3.30
-    # (Oct 2019). Stripped-down deployment environments occasionally ship an
-    # older libsqlite3; surface that here at open time rather than letting one
-    # tool fail mysteriously later. Modern CPython builds bundle 3.40+.
-    if sqlite3.sqlite_version_info < (3, 30):
+    # schema.sql's FTS5 tables use contentless_delete=1, added in SQLite 3.43
+    # (Aug 2023). Older libraries fail CREATE VIRTUAL TABLE with an opaque
+    # "unrecognized option" error, and the indexer's DELETE FROM *_fts is
+    # illegal on contentless tables without it. (3.43 also covers the NULLS
+    # LAST ordering vote_breakdown needs, added in 3.30.) Modern CPython and
+    # uv-managed interpreters bundle 3.45+; Linux system Pythons may not.
+    if sqlite3.sqlite_version_info < (3, 43):
         raise RuntimeError(
-            f"SQLite >= 3.30 required (vote_breakdown uses NULLS LAST). "
-            f"Found {sqlite3.sqlite_version}. Upgrade Python or rebuild "
-            f"with a newer libsqlite3."
+            f"SQLite >= 3.43 required (FTS5 contentless_delete). Found "
+            f"{sqlite3.sqlite_version}. Use a Python whose sqlite3 links a "
+            f"newer libsqlite3 (e.g. a uv-managed interpreter: uv python install)."
         )
     # check_same_thread=False lets a single Connection be used from any thread
     # — required because FastMCP can dispatch tools off the main thread. The

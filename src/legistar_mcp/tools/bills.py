@@ -321,7 +321,15 @@ def get_bill_text(
     elif text:
         segments.append({"offset": 0, "text": text[: context_chars * 2]})
 
-    covered = sum(len(s["text"]) for s in segments)
+    # Union of segment intervals — summing lengths double-counts overlapping
+    # windows and can report truncated=False while real text is uncovered.
+    covered = 0
+    last_end = 0
+    for s in segments:
+        start, end = s["offset"], s["offset"] + len(s["text"])
+        if end > last_end:
+            covered += end - max(start, last_end)
+            last_end = end
     return {
         "file": row["file"],
         "id": bill_id,

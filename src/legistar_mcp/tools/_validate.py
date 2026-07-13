@@ -55,9 +55,17 @@ def validate_iso_date(name: str, value: str | None) -> str | None:
         if len(v) == 7:
             _dt.date.fromisoformat(v + "-01")
             return v
-        if len(v) >= 10:
-            _dt.date.fromisoformat(v[:10])
+        if len(v) == 10:
+            _dt.date.fromisoformat(v)
             return v
+        if len(v) > 10:
+            # Full timestamp: validate the WHOLE string, not just v[:10], so a
+            # bad suffix ('2024-08-15xxxx') can't slip past an ISO-promising
+            # validator. Normalize a space separator (str(datetime.now()) form,
+            # '2024-08-15 23:59:59') to 'T': stored timestamps use 'T', and
+            # space (0x20) < 'T' would lex-exclude the very day named.
+            _dt.datetime.fromisoformat(v)
+            return v.replace(" ", "T", 1)
     except ValueError:
         pass
     raise ValueError(

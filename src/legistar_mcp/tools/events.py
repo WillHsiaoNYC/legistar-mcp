@@ -277,7 +277,7 @@ def aggregate_events(
     (empty group_by = one grand-total row).
 
     Allowed group_by values: body_name, event_year, event_month. Filters mirror
-    search_events (date_from/date_to/committee/agency). Shares its query engine
+    search_events (query/agency/date_from/date_to/committee). Shares its query engine
     with aggregate_bills (see tools/_aggregate.run_aggregate) — useful for
     answering "which committees held the most hearings in <year>?" in one
     round-trip.

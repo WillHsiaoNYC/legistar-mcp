@@ -123,8 +123,9 @@ def make_server() -> FastMCP:
             "- For agency questions prefer search_bills/search_events with "
             "agency=… — it expands aliases and returns role-context "
             "`mentions` snippets. Combine with query=… to narrow.\n"
-            "- List tools return {results, total, offset, truncated}; page "
-            "with offset. Every result row carries legistar_url — cite it.\n"
+            "- List tools (except list_vocabulary) return {results, total, "
+            "offset, truncated}; page with offset. Bill and event rows carry "
+            "legistar_url — cite it.\n"
             "- Empty `mentions` on an FTS hit means stemmed (non-literal) "
             "match, not a false positive; use get_bill_text for the passage."
         ),

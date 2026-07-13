@@ -66,3 +66,17 @@ def test_get_bill_text_no_match_returns_empty_segments(indexed_db):
 
     out = get_bill_text(conn, root, file="Int 0153-2022", query="zzzunfindable")
     assert out["segments"] == [] and out["total_chars"] > 0
+
+
+def test_get_bill_text_truncated_not_fooled_by_overlapping_windows(indexed_db):
+    conn, root = indexed_db
+    from legistar_mcp.tools.bills import get_bill_text
+    # A common word with huge context windows produces heavily overlapping
+    # segments; summed lengths exceed total_chars while real text remains
+    # uncovered. Interval-union coverage must still report truncated=True.
+    out = get_bill_text(
+        conn, root, file="Int 0153-2022",
+        query="the", context_chars=5000,
+    )
+    assert sum(len(s["text"]) for s in out["segments"]) > out["total_chars"]
+    assert out["truncated"] is True

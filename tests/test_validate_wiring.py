@@ -174,3 +174,11 @@ def test_aggregate_empty_group_by_is_grand_total(indexed_db):
     from legistar_mcp.tools.bills import aggregate_bills
     out = aggregate_bills(indexed_db, group_by=[])
     assert out["results"] == [{"count": 3}]
+
+
+def test_space_separated_timestamp_includes_the_whole_day(indexed_db):
+    """'2024-08-15 23:59:59' (space form) previously lex-excluded every
+    '...T...' row on that day; normalization makes both forms equivalent."""
+    t_form = search_events(indexed_db, date_to="2024-08-15T23:59:59")
+    space_form = search_events(indexed_db, date_to="2024-08-15 23:59:59")
+    assert space_form["total"] == t_form["total"]

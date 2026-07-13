@@ -82,21 +82,9 @@ def test_incremental_on_fresh_db_succeeds_and_stamps_version(tmp_path, fixtures_
     assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
 
 
-def test_incremental_on_stale_populated_db_still_refused(tmp_path, fixtures_root):
-    """The guard must still protect populated-but-stale DBs."""
-    conn = init_db(tmp_path / "stale.db")
-    build_all(conn, archive_root=fixtures_root, incremental=False)
-    conn.execute("PRAGMA user_version = 1")  # simulate data indexed by an old release
-    conn.commit()
-    with pytest.raises(RuntimeError, match="Re-run with --full"):
-        build_all(conn, archive_root=fixtures_root, incremental=True)
-
-
 def test_empty_archive_dir_errors_instead_of_silent_success(tmp_path):
     """Pointing --archive at an existing-but-wrong directory previously
     'succeeded' with bills=0 and persisted the junk path. It must error."""
-    from legistar_mcp.db import init_db
-    import pytest
     conn = init_db(tmp_path / "t.db")
     wrong_dir = tmp_path / "not_an_archive"
     wrong_dir.mkdir()

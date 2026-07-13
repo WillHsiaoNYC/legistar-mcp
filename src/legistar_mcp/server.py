@@ -37,6 +37,7 @@ from .tools.people import search_people as _search_people
 from .tools.relationships import co_sponsors as _co_sponsors
 from .tools.relationships import get_voting_record as _get_voting_record
 from .tools.relationships import vote_breakdown as _vote_breakdown
+from .tools.vocab import list_agencies as _list_agencies
 from .tools.vocab import list_vocabulary as _list_vocabulary
 
 # Every tool is read-only (never mutates the archive) and closed-world (never
@@ -508,6 +509,22 @@ def make_server() -> FastMCP:
     ) -> list[str]:
         """Every distinct value for a filter column — use before filtering by status/type/committee to get exact spellings. Complete list, no paging. For agencies use list_agencies instead."""
         return _list_vocabulary(conn, field=field)
+
+    @server.tool(annotations=_RO)
+    @_db_locked
+    def list_agencies(
+        query: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Substring filter over slug, display name, and aliases "
+                    "(e.g. 'police', 'consumer')."
+                )
+            ),
+        ] = None,
+    ) -> dict:
+        """The 95 NYC agencies the `agency=` parameter understands, with slug, display name, and accepted aliases. Call this before agency-filtered searches when unsure of a name; unmatched agency strings fall back to literal phrase search."""
+        return _list_agencies(query=query)
 
     @server.tool(annotations=_RO)
     @_db_locked

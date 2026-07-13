@@ -96,3 +96,26 @@ def test_empty_archive_dir_errors_instead_of_silent_success(tmp_path):
     ).fetchone()
     assert row is None
     assert conn.execute("PRAGMA user_version").fetchone()[0] == 0
+
+
+def test_incremental_indexes_files_without_lastmodified(tmp_path, fixtures_root):
+    """A record with no LastModified previously compared None == None against
+    the 'seen' map and was skipped forever — never indexed at all."""
+    import json
+    import shutil
+    from legistar_mcp.db import init_db
+
+    archive = tmp_path / "archive"
+    shutil.copytree(fixtures_root, archive)
+    conn = init_db(tmp_path / "t.db")
+    build_all(conn, archive_root=archive, incremental=False)
+
+    src = json.loads((archive / "bills" / "int_0001_2024.json").read_text())
+    src["ID"] = 999001
+    src["File"] = "Int 9990-2024"
+    src.pop("LastModified", None)
+    (archive / "bills" / "no_lastmod.json").write_text(json.dumps(src))
+
+    build_all(conn, archive_root=archive, incremental=True)
+    row = conn.execute("SELECT file FROM bills WHERE id = 999001").fetchone()
+    assert row is not None and row["file"] == "Int 9990-2024"

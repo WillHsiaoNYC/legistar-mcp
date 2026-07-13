@@ -117,7 +117,11 @@ def build_all(
         for p in it:
             if incremental:
                 rel = p.resolve().relative_to(archive_resolved).as_posix()
-                if seen_bills.get(rel) == _last_modified_of(p):
+                lm = _last_modified_of(p)
+                # `lm is None` must never match: a file with no LastModified
+                # would compare None == None against a never-seen path and be
+                # skipped forever. Unknown paths and None stamps always index.
+                if rel in seen_bills and lm is not None and seen_bills[rel] == lm:
                     continue
             index_bill_file(conn, p, archive_root)
             stats["bills"] += 1
@@ -126,7 +130,11 @@ def build_all(
         for p in it:
             if incremental:
                 rel = p.resolve().relative_to(archive_resolved).as_posix()
-                if seen_events.get(rel) == _last_modified_of(p):
+                lm = _last_modified_of(p)
+                # `lm is None` must never match: a file with no LastModified
+                # would compare None == None against a never-seen path and be
+                # skipped forever. Unknown paths and None stamps always index.
+                if rel in seen_events and lm is not None and seen_events[rel] == lm:
                     continue
             index_event_file(conn, p, archive_root)
             stats["events"] += 1

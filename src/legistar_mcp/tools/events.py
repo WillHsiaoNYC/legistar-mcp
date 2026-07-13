@@ -5,7 +5,7 @@ from sqlite3 import Connection
 
 from .._db_utils import _check_table_populated
 from ._aggregate import date_upper_bound, fts_join, run_aggregate
-from ._snippet import _archive_root, _build_snippet, _extract_phrases
+from ._snippet import _archive_root, _build_snippet, snippet_phrases
 from ._validate import (
     build_fts_query,
     clamp_limit,
@@ -106,9 +106,7 @@ def search_events(
     # A council meeting can have 100+ Items × 3 fields × N alias phrases; without
     # dedupe + cap, one search response could carry 10k+ near-identical snippets.
     if fts_query and rows:
-        phrases = _extract_phrases(fts_query)
-        if query and query.strip():
-            phrases.append(query.strip())
+        phrases = snippet_phrases(fts_query, query)
         root = _archive_root(conn)
         ids = [r["id"] for r in rows]
         path_rows = {

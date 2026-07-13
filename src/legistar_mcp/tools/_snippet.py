@@ -36,6 +36,17 @@ def _extract_phrases(fts_query: str) -> list[str]:
     return re.findall(r'"([^"]+)"', fts_query)
 
 
+def snippet_phrases(fts_query: str, raw_query: str | None) -> list[str]:
+    """The highlight rule for search mentions, shared by bills and events
+    search: every quoted phrase in the resolved FTS query (agency aliases,
+    user-quoted phrases), plus the raw free-text query so an unquoted
+    multi-word query still gets a literal-match snippet."""
+    phrases = _extract_phrases(fts_query)
+    if raw_query and raw_query.strip():
+        phrases.append(raw_query.strip())
+    return phrases
+
+
 def _build_snippet(
     text: str, phrases: list[str], window: int = 120
 ) -> str | None:

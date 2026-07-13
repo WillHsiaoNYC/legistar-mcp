@@ -154,8 +154,11 @@ def test_vote_breakdown_includes_vote_value(indexed_db):
     assert "Affirmative" in values
 
 
-def test_vote_breakdown_unknown_bill_returns_empty(indexed_db):
-    assert vote_breakdown(indexed_db, bill_id=99999999) == []
+def test_vote_breakdown_unknown_bill_raises_guided_error(indexed_db):
+    """An unknown bill_id raises with next-step guidance instead of a silent []
+    (resolve_bill_id verifies both the file and numeric-id branches)."""
+    with pytest.raises(ValueError, match="search_bills"):
+        vote_breakdown(indexed_db, bill_id=99999999)
 
 
 def test_vote_breakdown_raises_stale_index_when_votes_empty(indexed_db):

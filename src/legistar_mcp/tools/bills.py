@@ -4,7 +4,7 @@ from pathlib import Path
 from sqlite3 import Connection
 
 from ._aggregate import fts_join, run_aggregate, year_window
-from ._snippet import _archive_root, _build_snippet, _extract_phrases
+from ._snippet import _archive_root, _build_snippet, snippet_phrases
 from ._validate import (
     build_fts_query,
     clamp_limit,
@@ -115,9 +115,7 @@ def search_bills(
         r["legistar_url"] = _legistar_url(r.get("id"))
 
     if fts_query and rows:
-        phrases = _extract_phrases(fts_query)
-        if query and query.strip():
-            phrases.append(query.strip())
+        phrases = snippet_phrases(fts_query, query)
         root = _archive_root(conn)
         path_rows = {
             r["id"]: r["path"]

@@ -55,10 +55,7 @@ def validate_iso_date(name: str, value: str | None) -> str | None:
         if len(v) == 7:
             _dt.date.fromisoformat(v + "-01")
             return v
-        if len(v) == 10:
-            _dt.date.fromisoformat(v)
-            return v
-        if len(v) > 10:
+        if len(v) >= 10:
             _dt.date.fromisoformat(v[:10])
             return v
     except ValueError:
@@ -151,6 +148,10 @@ def resolve_bill_id(conn: Connection, file: str | None, id: int | None) -> int:
                 f"'Res 0021-2024'; find bills via search_bills."
             )
         return row["id"]
+    # Verify the numeric id too — otherwise tools fed a hallucinated id return
+    # a silent [] instead of the guided error this helper exists to provide.
+    if conn.execute("SELECT 1 FROM bills WHERE id = ?", (id,)).fetchone() is None:
+        raise ValueError(f"No bill with id {id}. Find bills via search_bills.")
     return id
 
 

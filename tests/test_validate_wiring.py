@@ -144,3 +144,14 @@ def test_plain_query_search_returns_mentions(indexed_db):
     rows_bare = search_bills(indexed_db, query="domestic violence", limit=5)
     hit_bare = next(r for r in rows_bare if "0153-2022" in r["file"])
     assert hit_bare["mentions"]
+
+
+def test_unknown_numeric_bill_id_raises_not_empty(indexed_db):
+    """resolve_bill_id must verify the numeric-id branch too — a hallucinated
+    bill_id previously returned a silent [] from vote_breakdown/get_bill_hearings."""
+    from legistar_mcp.tools.events import get_bill_hearings
+
+    with pytest.raises(ValueError, match="search_bills"):
+        vote_breakdown(indexed_db, bill_id=999999999)
+    with pytest.raises(ValueError, match="search_bills"):
+        get_bill_hearings(indexed_db, id=999999999)

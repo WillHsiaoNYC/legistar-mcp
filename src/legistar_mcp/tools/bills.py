@@ -1,5 +1,6 @@
 import datetime as _dt
 import json
+import re
 from pathlib import Path
 from sqlite3 import Connection
 
@@ -287,3 +288,46 @@ def recent_bills(
     if warning:
         out["warning"] = warning
     return out
+
+
+def get_bill_text(
+    conn: Connection,
+    archive_root: Path,
+    file: str | None = None,
+    id: int | None = None,
+    query: str | None = None,
+    context_chars: int = 1500,
+    max_matches: int = 5,
+) -> dict:
+    """Targeted extraction from a bill's statutory Text. The middle step
+    between a 120-char search snippet and get_bill's full record (which can
+    run to megabytes for omnibus bills): with `query`, windows around each
+    case-insensitive occurrence; without, the head of the text."""
+    context_chars = max(100, min(context_chars, 5000))
+    max_matches = max(1, min(max_matches, 20))
+    bill_id = resolve_bill_id(conn, file, id)
+    row = conn.execute(
+        "SELECT file, path FROM bills WHERE id = ?", (bill_id,)
+    ).fetchone()
+    data = load_archive_json(archive_root, row["path"])
+    text = data.get("Text") or ""
+
+    segments: list[dict] = []
+    if query and query.strip():
+        for m in re.finditer(re.escape(query.strip()), text, re.IGNORECASE):
+            start = max(0, m.start() - context_chars)
+            end = min(len(text), m.end() + context_chars)
+            segments.append({"offset": start, "text": text[start:end]})
+            if len(segments) >= max_matches:
+                break
+    elif text:
+        segments.append({"offset": 0, "text": text[: context_chars * 2]})
+
+    covered = sum(len(s["text"]) for s in segments)
+    return {
+        "file": row["file"],
+        "id": bill_id,
+        "total_chars": len(text),
+        "truncated": covered < len(text),
+        "segments": segments,
+    }

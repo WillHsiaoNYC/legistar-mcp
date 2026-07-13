@@ -23,6 +23,7 @@ from .db import open_db
 from .tools._snippet import _archive_root
 from .tools.bills import aggregate_bills as _aggregate_bills
 from .tools.bills import get_bill as _get_bill
+from .tools.bills import get_bill_text as _get_bill_text
 from .tools.bills import recent_bills as _recent_bills
 from .tools.bills import search_bills as _search_bills
 from .tools.committees import list_committees as _list_committees
@@ -243,6 +244,38 @@ def make_server() -> FastMCP:
     ) -> dict:
         """Fetch one bill's full source record (sponsors, history, attachments, votes, full text). Responses can be large — for just the statutory text around a phrase, prefer get_bill_text. Supply `file` or `id`; unknown identifiers raise an error naming the fix."""
         return _get_bill(conn, archive_root, file=file, id=id)
+
+    @server.tool(annotations=_RO)
+    @_db_locked
+    def get_bill_text(
+        file: Annotated[
+            str | None,
+            Field(description="Bill file number, e.g. 'Int 0153-2022'."),
+        ] = None,
+        id: Annotated[int | None, Field(description="Numeric bill ID.")] = None,
+        query: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Literal phrase to locate (case-insensitive). Omit to "
+                    "get the head of the text."
+                )
+            ),
+        ] = None,
+        context_chars: Annotated[
+            int,
+            Field(description="Characters of context on each side of a match (100-5000)."),
+        ] = 1500,
+        max_matches: Annotated[
+            int,
+            Field(description="Max match windows to return (1-20)."),
+        ] = 5,
+    ) -> dict:
+        """Extract passages from a bill's full statutory text without fetching the whole record: windows around each occurrence of `query`, or the head of the text if no query. Returns total_chars/truncated so you know how much text exists beyond the segments."""
+        return _get_bill_text(
+            conn, archive_root, file=file, id=id, query=query,
+            context_chars=context_chars, max_matches=max_matches,
+        )
 
     @server.tool(annotations=_RO)
     @_db_locked

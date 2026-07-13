@@ -50,6 +50,10 @@ def test_build_all_refuses_incremental_when_user_version_stale(tmp_path, fixture
     LastModified-changed files would get the new schema's mirror writes — the
     rest of the archive would silently stay empty. build_all must refuse."""
     conn = init_db(tmp_path / "t.db")
+    # Seed real data first so the DB is populated-but-stale: a fresh/empty DB
+    # now auto-promotes to a full build (Task 1), so only a populated DB
+    # actually exercises the stale-schema guard.
+    build_all(conn, archive_root=fixtures_root)
     # Force user_version to an older value, simulating an upgrade.
     conn.execute("PRAGMA user_version = 0")
     conn.commit()
@@ -67,3 +71,22 @@ def test_build_all_allows_full_when_user_version_stale(tmp_path, fixtures_root):
     stats = build_all(conn, archive_root=fixtures_root, incremental=False)
     assert stats["bills"] >= 1
     assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+
+
+def test_incremental_on_fresh_db_succeeds_and_stamps_version(tmp_path, fixtures_root):
+    """README quickstart uses the CLI default (--incremental) on a brand-new DB.
+    A fresh DB must auto-promote to a full build instead of raising."""
+    conn = init_db(tmp_path / "fresh.db")
+    stats = build_all(conn, archive_root=fixtures_root, incremental=True)
+    assert stats["bills"] > 0
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+
+
+def test_incremental_on_stale_populated_db_still_refused(tmp_path, fixtures_root):
+    """The guard must still protect populated-but-stale DBs."""
+    conn = init_db(tmp_path / "stale.db")
+    build_all(conn, archive_root=fixtures_root, incremental=False)
+    conn.execute("PRAGMA user_version = 1")  # simulate data indexed by an old release
+    conn.commit()
+    with pytest.raises(RuntimeError, match="Re-run with --full"):
+        build_all(conn, archive_root=fixtures_root, incremental=True)

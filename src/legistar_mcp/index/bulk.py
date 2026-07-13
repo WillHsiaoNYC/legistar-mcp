@@ -50,6 +50,15 @@ def build_all(
     incremental: bool = False,
     show_progress: bool = False,
 ) -> dict[str, int]:
+    # A brand-new DB (no bills rows) has user_version=0, which the stale-schema
+    # guard below would refuse even though there is nothing stale — the CLI
+    # default (--incremental) would then fail on first run. Incremental is
+    # meaningless with no prior rows anyway, so promote to a full build; that
+    # also stamps user_version at the end.
+    has_rows = conn.execute("SELECT 1 FROM bills LIMIT 1").fetchone() is not None
+    if incremental and not has_rows:
+        incremental = False
+
     # Refuse to run incremental when the DB was indexed under an older schema
     # version. Incremental only re-walks files whose LastModified changed, so
     # tables/columns introduced by a newer release would stay empty/NULL for

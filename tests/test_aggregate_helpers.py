@@ -131,11 +131,14 @@ def test_date_upper_bound_full_timestamp_compared_directly():
     assert param == ts
 
 
-def test_date_upper_bound_non_date_ten_chars_falls_back_to_lte():
-    # len==10 but not a real date: don't crash, fall back to direct compare.
-    clause, param = date_upper_bound("events.date", "2024-13-99")
+def test_date_upper_bound_full_timestamp_naive_compared_directly():
+    # A full timestamp (longer than a bare date, no timezone) names an exact
+    # instant — honor it verbatim with <=. Malformed prefixes no longer reach
+    # here: validate_iso_date rejects them upstream before the query is built.
+    ts = "2024-08-15T23:59:59"
+    clause, param = date_upper_bound("events.date", ts)
     assert clause == "events.date <= ?"
-    assert param == "2024-13-99"
+    assert param == ts
 
 
 def test_date_upper_bound_max_iso_date_does_not_crash():
@@ -167,10 +170,13 @@ def test_date_upper_bound_year_prefix_covers_whole_year():
     assert param == "2025-01-01"
 
 
-def test_date_upper_bound_non_month_seven_chars_falls_back_to_lte():
-    clause, param = date_upper_bound("events.date", "2024-13")
+def test_date_upper_bound_full_timestamp_utc_compared_directly():
+    # A full UTC timestamp ('Z' suffix) is honored verbatim with <=, same as an
+    # offset timestamp — only bare YYYY / YYYY-MM / YYYY-MM-DD prefixes expand.
+    ts = "2024-08-15T23:59:59Z"
+    clause, param = date_upper_bound("events.date", ts)
     assert clause == "events.date <= ?"
-    assert param == "2024-13"
+    assert param == ts
 
 
 def test_date_upper_bound_year_9999_prefix_falls_back_to_lte():

@@ -76,17 +76,17 @@ def test_get_voting_record_year_to_includes_dec_31(indexed_db):
     assert any(r["vote_date"] == "2024-12-31T23:59:59Z" for r in results)
 
 
-def test_get_voting_record_year_zero_is_a_real_bound(indexed_db):
-    """get_voting_record must share year_window()'s semantics: year bounds use
-    `is not None`, so year_to=0 means "through year 0" (nothing matches) —
-    not "no filter". The old hand-rolled truthiness check silently ignored
-    the bound and returned every vote."""
+def test_get_voting_record_year_zero_is_rejected(indexed_db):
+    """year_to=0 is no longer a silent "through year 0" bound: validate_year
+    rejects any year outside [1900, 2100] with actionable guidance, so the tool
+    raises instead of returning a confusingly-empty result set."""
     row = indexed_db.execute(
         "SELECT person_slug FROM votes WHERE bill_id = 68628 LIMIT 1"
     ).fetchone()
     slug = row["person_slug"]
     assert get_voting_record(indexed_db, slug=slug)  # guard: slug has votes
-    assert get_voting_record(indexed_db, slug=slug, year_to=0) == []
+    with pytest.raises(ValueError, match="4-digit year"):
+        get_voting_record(indexed_db, slug=slug, year_to=0)
 
 
 def test_get_voting_record_raises_stale_index_when_votes_empty(indexed_db):

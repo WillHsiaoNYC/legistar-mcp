@@ -5,7 +5,7 @@ from sqlite3 import Connection
 
 from ._aggregate import fts_join, run_aggregate, year_window
 from ._snippet import _archive_root, _build_snippet, _extract_phrases
-from ._validate import build_fts_query, clamp_limit
+from ._validate import build_fts_query, clamp_limit, validate_days, validate_year
 
 # Fields searched for snippet context. Matches the FTS column set, with
 # "text" mapped to the source JSON's "Text" key.
@@ -79,6 +79,8 @@ def search_bills(
     limit: int = 20,
 ) -> list[dict]:
     limit = clamp_limit(limit)
+    year_from = validate_year("year_from", year_from)
+    year_to = validate_year("year_to", year_to)
     fts_query = build_fts_query(conn, "bills", query, agency)
 
     joins, where, params = _bill_filters(fts_query, year_from, year_to, status, type, committee)
@@ -198,6 +200,8 @@ def aggregate_bills(
     one slug). Passing agency triggers an FTS5 join that may slow large
     aggregations; bound results with `limit`.
     """
+    year_from = validate_year("year_from", year_from)
+    year_to = validate_year("year_to", year_to)
     fts_query = build_fts_query(conn, "bills", query, agency)
     joins, where, params = _bill_filters(fts_query, year_from, year_to, status, type, committee)
     if "sponsor_slug" in group_by or sponsor_slug:
@@ -235,6 +239,7 @@ def recent_bills(
     precise bounded window.
     """
     limit = clamp_limit(limit)
+    days = validate_days(days)
     cutoff = (_dt.date.today() - _dt.timedelta(days=days)).isoformat()
     sql = (
         "SELECT DISTINCT bills.id, bills.guid, bills.file, bills.title, "

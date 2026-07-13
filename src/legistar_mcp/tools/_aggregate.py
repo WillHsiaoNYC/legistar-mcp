@@ -81,9 +81,10 @@ def date_upper_bound(col: str, date_to: str) -> tuple[str, str]:
     - ``YYYY-MM``    → `col < {first of next month}`
     - ``YYYY``       → `col < {next Jan 1}`
 
-    A full timestamp, a malformed string, or a bound past year 9999 (where no
-    next-period boundary is representable — date.max + 1 day raises
-    OverflowError, not ValueError) is compared directly with `<=`.
+    A full timestamp, or a bound past year 9999 (where no next-period boundary
+    is representable — date.max + 1 day raises OverflowError, not ValueError),
+    is compared directly with `<=`. Malformed prefixes are rejected upstream by
+    validate_iso_date, so they raise here rather than silently falling back.
     Returns (clause, param).
     """
     try:
@@ -96,8 +97,8 @@ def date_upper_bound(col: str, date_to: str) -> tuple[str, str]:
             return f"{col} < ?", nxt.isoformat()
         if len(date_to) == 4 and date_to.isdigit() and int(date_to) < 9999:
             return f"{col} < ?", f"{int(date_to) + 1:04d}-01-01"
-    except (ValueError, OverflowError):
-        pass
+    except OverflowError:
+        pass  # year 9999: no next-period boundary is representable
     return f"{col} <= ?", date_to
 
 

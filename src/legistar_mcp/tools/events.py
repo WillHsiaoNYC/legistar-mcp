@@ -6,7 +6,7 @@ from sqlite3 import Connection
 from .._db_utils import _check_table_populated
 from ._aggregate import date_upper_bound, fts_join, run_aggregate
 from ._snippet import _archive_root, _build_snippet, _extract_phrases
-from ._validate import build_fts_query, clamp_limit
+from ._validate import build_fts_query, clamp_limit, validate_days, validate_iso_date
 from .bills import _legistar_url as _legistar_url_bill
 
 # events_fts column order: item_title (0), agenda_note (1), minutes_note (2).
@@ -73,6 +73,8 @@ def search_events(
     limit: int = 20,
 ) -> list[dict]:
     limit = clamp_limit(limit)
+    date_from = validate_iso_date("date_from", date_from)
+    date_to = validate_iso_date("date_to", date_to)
     fts_query = build_fts_query(conn, "events", query, agency)
 
     joins, where, params = _event_filters(fts_query, date_from, date_to, committee)
@@ -155,6 +157,7 @@ def upcoming_events(
 ) -> list[dict]:
     """Events in the next `days` days. Same row shape as search_events."""
     limit = clamp_limit(limit)
+    days = validate_days(days)
     today = _dt.date.today().isoformat()
     # The last in-window day is today + days; date_upper_bound turns it into
     # the exclusive next-day bound so full ISO timestamps on that day (e.g.
@@ -253,6 +256,8 @@ def aggregate_events(
     A bare YYYY-MM-DD date_to covers the whole day (events store full ISO
     timestamps), so date_to='2024-12-31' counts every hearing on Dec 31.
     """
+    date_from = validate_iso_date("date_from", date_from)
+    date_to = validate_iso_date("date_to", date_to)
     fts_query = build_fts_query(conn, "events", query, agency)
     joins, where, params = _event_filters(fts_query, date_from, date_to, committee)
 

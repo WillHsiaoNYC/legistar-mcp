@@ -43,3 +43,26 @@ def test_query_and_agency_combine_instead_of_override(indexed_db):
         indexed_db, query="zzzunfindable", agency="Mayor's Office of Operations", limit=5
     )
     assert combined == []  # query was previously discarded → would return the agency hits
+
+
+def test_bad_year_and_date_and_days_raise_guidance(indexed_db):
+    from legistar_mcp.tools.bills import aggregate_bills
+    from legistar_mcp.tools.committees import list_committees
+    from legistar_mcp.tools.relationships import get_voting_record
+
+    with pytest.raises(ValueError, match="4-digit year"):
+        search_bills(indexed_db, year_from=24)          # previously: filter silently ignored
+    with pytest.raises(ValueError, match="4-digit year"):
+        aggregate_bills(indexed_db, group_by=["intro_year"], year_to=24)
+    with pytest.raises(ValueError, match="4-digit year"):
+        list_committees(indexed_db, year_from=99)
+    with pytest.raises(ValueError, match="4-digit year"):
+        get_voting_record(indexed_db, slug="adrienne-e-adams", year_from=24)
+    with pytest.raises(ValueError, match="ISO format"):
+        search_events(indexed_db, date_from="08/15/2024")  # previously: matched everything
+    with pytest.raises(ValueError, match="ISO format"):
+        search_events(indexed_db, date_to="Aug 15")
+    with pytest.raises(ValueError, match="days"):
+        recent_bills(indexed_db, days=-7)               # previously: future-window inversion
+    with pytest.raises(ValueError, match="days"):
+        upcoming_events(indexed_db, days=0)

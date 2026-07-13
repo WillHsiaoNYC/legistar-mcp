@@ -2,7 +2,7 @@ from sqlite3 import Connection
 
 from .._db_utils import _check_table_populated
 from ._aggregate import year_window
-from ._validate import clamp_limit
+from ._validate import clamp_limit, validate_year
 
 
 def co_sponsors(
@@ -37,6 +37,8 @@ def get_voting_record(
     """Every vote cast by `slug`, optionally filtered by year and outcome.
     Raises StaleIndexError if the votes table is empty post-upgrade."""
     limit = clamp_limit(limit, hi=1000)
+    year_from = validate_year("year_from", year_from)
+    year_to = validate_year("year_to", year_to)
     _check_table_populated(conn, "votes", "bills")
 
     sql = (

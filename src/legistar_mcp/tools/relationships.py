@@ -2,12 +2,14 @@ from sqlite3 import Connection
 
 from .._db_utils import _check_table_populated
 from ._aggregate import year_window
+from ._validate import clamp_limit
 
 
 def co_sponsors(
     conn: Connection, slug: str, min_overlap: int = 5, limit: int = 20
 ) -> list[dict]:
     """Return council members who have co-sponsored the most bills with `slug`."""
+    limit = clamp_limit(limit)
     sql = """
         SELECT s2.person_slug AS slug,
                COALESCE(p.full_name, s2.person_slug) AS full_name,
@@ -34,6 +36,7 @@ def get_voting_record(
 ) -> list[dict]:
     """Every vote cast by `slug`, optionally filtered by year and outcome.
     Raises StaleIndexError if the votes table is empty post-upgrade."""
+    limit = clamp_limit(limit, hi=1000)
     _check_table_populated(conn, "votes", "bills")
 
     sql = (
@@ -77,6 +80,7 @@ def vote_breakdown(conn: Connection, bill_id: int, limit: int = 100) -> list[dic
     Raises StaleIndexError if the votes table is empty post-upgrade (run
     `--full` to backfill).
     """
+    limit = clamp_limit(limit, hi=1000)
     _check_table_populated(conn, "votes", "bills")
 
     # `v.vote_date IS NULL` is 0 for not-null and 1 for null, so adding it as

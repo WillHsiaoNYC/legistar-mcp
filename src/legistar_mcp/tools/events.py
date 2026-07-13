@@ -7,6 +7,7 @@ from .._db_utils import _check_table_populated
 from ..agency import resolve_to_fts_query
 from ._aggregate import date_upper_bound, fts_join, run_aggregate
 from ._snippet import _archive_root, _build_snippet, _extract_phrases, _get_agencies
+from ._validate import clamp_limit
 from .bills import _legistar_url as _legistar_url_bill
 
 # events_fts column order: item_title (0), agenda_note (1), minutes_note (2).
@@ -72,6 +73,7 @@ def search_events(
     committee: str | None = None,
     limit: int = 20,
 ) -> list[dict]:
+    limit = clamp_limit(limit)
     if agency:
         query = resolve_to_fts_query(agency, _get_agencies())
 
@@ -154,6 +156,7 @@ def upcoming_events(
     limit: int = 20,
 ) -> list[dict]:
     """Events in the next `days` days. Same row shape as search_events."""
+    limit = clamp_limit(limit)
     today = _dt.date.today().isoformat()
     # The last in-window day is today + days; date_upper_bound turns it into
     # the exclusive next-day bound so full ISO timestamps on that day (e.g.
@@ -185,6 +188,7 @@ def get_bill_hearings(
 ) -> list[dict]:
     """Events where the given bill was on the agenda. Raises StaleIndexError
     if the event_items table is empty post-upgrade (run `--full` to fix)."""
+    limit = clamp_limit(limit)
     _check_table_populated(conn, "event_items", "events")
 
     if file:

@@ -6,6 +6,7 @@ from sqlite3 import Connection
 from ..agency import resolve_to_fts_query
 from ._aggregate import fts_join, run_aggregate, year_window
 from ._snippet import _archive_root, _build_snippet, _extract_phrases, _get_agencies
+from ._validate import clamp_limit
 
 # Fields searched for snippet context. Matches the FTS column set, with
 # "text" mapped to the source JSON's "Text" key.
@@ -78,6 +79,7 @@ def search_bills(
     sponsor_slug: str | None = None,
     limit: int = 20,
 ) -> list[dict]:
+    limit = clamp_limit(limit)
     if agency:
         query = resolve_to_fts_query(agency, _get_agencies())
 
@@ -233,6 +235,7 @@ def recent_bills(
     (ORDER BY intro_date DESC). Use search_bills(year_to=...) for a
     precise bounded window.
     """
+    limit = clamp_limit(limit)
     cutoff = (_dt.date.today() - _dt.timedelta(days=days)).isoformat()
     sql = (
         "SELECT DISTINCT bills.id, bills.guid, bills.file, bills.title, "

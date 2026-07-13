@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from sqlite3 import Connection
 
+from ._validate import clamp_limit
+
 
 def search_people(
     conn: Connection,
@@ -9,6 +11,7 @@ def search_people(
     active_only: bool = False,
     limit: int = 20,
 ) -> list[dict]:
+    limit = clamp_limit(limit)
     where: list[str] = []
     params: list = []
     if name:

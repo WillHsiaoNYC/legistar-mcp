@@ -9,6 +9,8 @@ a date-boundary rule lands in one place instead of diverging between copies.
 import datetime as _dt
 from sqlite3 import Connection
 
+from ._validate import clamp_limit
+
 
 def fts_join(table: str, id_col: str) -> tuple[list[str], str]:
     """FTS5 join clauses + MATCH predicate for `{table}`.
@@ -126,6 +128,7 @@ def run_aggregate(
     lets SQLite skip per-group distinct tracking. Results are ordered by count
     desc with the grouping columns as a stable tie-break.
     """
+    limit = clamp_limit(limit, hi=1000)
     validate_group_by(group_by, set(dim_exprs))
     where = list(where)  # local copy — never mutate the caller's list
     if non_null_cols:

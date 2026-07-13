@@ -6,7 +6,7 @@ from sqlite3 import Connection
 from .._db_utils import _check_table_populated
 from ._aggregate import date_upper_bound, fts_join, run_aggregate
 from ._snippet import _archive_root, _build_snippet, _extract_phrases
-from ._validate import build_fts_query, clamp_limit, validate_days, validate_iso_date
+from ._validate import build_fts_query, clamp_limit, today_nyc, validate_days, validate_iso_date
 from .bills import _legistar_url as _legistar_url_bill
 
 # events_fts column order: item_title (0), agenda_note (1), minutes_note (2).
@@ -158,17 +158,17 @@ def upcoming_events(
     """Events in the next `days` days. Same row shape as search_events."""
     limit = clamp_limit(limit)
     days = validate_days(days)
-    today = _dt.date.today().isoformat()
+    today = today_nyc()
     # The last in-window day is today + days; date_upper_bound turns it into
     # the exclusive next-day bound so full ISO timestamps on that day (e.g.
     # "2024-08-15T13:30:00-04:00") still match the lex compare.
-    last_day = (_dt.date.today() + _dt.timedelta(days=days)).isoformat()
+    last_day = (today + _dt.timedelta(days=days)).isoformat()
     clause, cutoff = date_upper_bound("events.date", last_day)
     sql = (
         "SELECT events.id, events.insite_url, events.body_name, events.date, events.location "
         f"FROM events WHERE events.date >= ? AND {clause}"
     )
-    params: list = [today, cutoff]
+    params: list = [today.isoformat(), cutoff]
     if committee:
         sql += " AND events.body_name = ?"
         params.append(committee)
@@ -211,7 +211,7 @@ def get_bill_hearings(
     params: list = [bill_id]
     if only_upcoming:
         sql += " AND events.date >= ?"
-        params.append(_dt.date.today().isoformat())
+        params.append(today_nyc().isoformat())
         # "Next hearing" semantics: nearest-future first. When only_upcoming
         # is False the caller is browsing history, so most-recent-first
         # (DESC) is the sensible default for that branch.

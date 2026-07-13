@@ -1,6 +1,7 @@
 """Wiring tests: validation helpers must actually be applied inside each tool.
 Uses the shared fixtures archive (3 bills, 1 event, 1 person)."""
 import pytest
+from freezegun import freeze_time
 
 from legistar_mcp.db import init_db
 from legistar_mcp.index.bulk import build_all
@@ -66,3 +67,13 @@ def test_bad_year_and_date_and_days_raise_guidance(indexed_db):
         recent_bills(indexed_db, days=-7)               # previously: future-window inversion
     with pytest.raises(ValueError, match="days"):
         upcoming_events(indexed_db, days=0)
+
+
+@freeze_time("2024-03-13 01:00:00")  # 01:00 UTC = 21:00 Mar 12 in NYC
+def test_windows_use_nyc_calendar_day(indexed_db):
+    """A UTC server just after NYC evening must still treat 'today' as Mar 12.
+    recent_bills(days=33) from Mar 12 reaches back to Feb 8 and catches the
+    Int 0001-2024 fixture (intro 2024-02-08); from a UTC 'today' of Mar 13 the
+    same window starts Feb 9 and misses it."""
+    results = recent_bills(indexed_db, days=33, limit=10)
+    assert any("0001-2024" in r["file"] for r in results)

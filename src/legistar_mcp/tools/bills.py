@@ -5,7 +5,7 @@ from sqlite3 import Connection
 
 from ._aggregate import fts_join, run_aggregate, year_window
 from ._snippet import _archive_root, _build_snippet, _extract_phrases
-from ._validate import build_fts_query, clamp_limit, validate_days, validate_year
+from ._validate import build_fts_query, clamp_limit, today_nyc, validate_days, validate_year
 
 # Fields searched for snippet context. Matches the FTS column set, with
 # "text" mapped to the source JSON's "Text" key.
@@ -240,7 +240,7 @@ def recent_bills(
     """
     limit = clamp_limit(limit)
     days = validate_days(days)
-    cutoff = (_dt.date.today() - _dt.timedelta(days=days)).isoformat()
+    cutoff = (today_nyc() - _dt.timedelta(days=days)).isoformat()
     sql = (
         "SELECT DISTINCT bills.id, bills.guid, bills.file, bills.title, "
         "bills.summary, bills.status_name, bills.type_name, bills.body_name, "

@@ -80,7 +80,7 @@ def test_upcoming_events_empty_when_no_future(indexed_db):
     assert upcoming_events(indexed_db, days=14) == []
 
 
-@freeze_time("2024-08-01")
+@freeze_time("2024-08-01 12:00:00")  # noon UTC = same NYC calendar day (Aug 1)
 def test_upcoming_events_includes_boundary_day(indexed_db):
     # Fixture event is 2024-08-15T13:30:00-04:00. Frozen 2024-08-01 + days=14
     # makes the cutoff day exactly 2024-08-15. The function must include

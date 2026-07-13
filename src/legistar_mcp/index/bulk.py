@@ -44,6 +44,69 @@ def _last_modified_of(path: Path) -> str | None:
         return (json.load(f) or {}).get("LastModified")
 
 
+def _purge_missing(
+    conn: Connection,
+    archive_resolved: Path,
+    *,
+    bills: list[Path],
+    events: list[Path],
+    people: list[Path],
+) -> int:
+    """Delete rows (and their dependents) whose `path` was not walked this run.
+    Runs on every build; on an unchanged archive the NOT-IN sets are empty and
+    this is a cheap no-op."""
+
+    def rels(paths: list[Path]) -> set[str]:
+        return {p.resolve().relative_to(archive_resolved).as_posix() for p in paths}
+
+    removed = 0
+    with conn:
+        walked = rels(bills)
+        gone = [
+            r["id"]
+            for r in conn.execute("SELECT id, path FROM bills")
+            if r["path"] not in walked
+        ]
+        for bid in gone:
+            fts = conn.execute(
+                "SELECT fts_rowid FROM bills_fts_map WHERE bill_id = ?", (bid,)
+            ).fetchone()
+            if fts:
+                conn.execute("DELETE FROM bills_fts WHERE rowid = ?", (fts["fts_rowid"],))
+            conn.execute("DELETE FROM bills_fts_map WHERE bill_id = ?", (bid,))
+            conn.execute("DELETE FROM sponsors WHERE bill_id = ?", (bid,))
+            conn.execute("DELETE FROM votes WHERE bill_id = ?", (bid,))
+            conn.execute("DELETE FROM bills WHERE id = ?", (bid,))
+        removed += len(gone)
+
+        walked = rels(events)
+        gone = [
+            r["id"]
+            for r in conn.execute("SELECT id, path FROM events")
+            if r["path"] not in walked
+        ]
+        for eid in gone:
+            for m in conn.execute(
+                "SELECT fts_rowid FROM events_fts_map WHERE event_id = ?", (eid,)
+            ).fetchall():
+                conn.execute("DELETE FROM events_fts WHERE rowid = ?", (m["fts_rowid"],))
+            conn.execute("DELETE FROM events_fts_map WHERE event_id = ?", (eid,))
+            conn.execute("DELETE FROM event_items WHERE event_id = ?", (eid,))
+            conn.execute("DELETE FROM events WHERE id = ?", (eid,))
+        removed += len(gone)
+
+        walked = rels(people)
+        gone = [
+            r["slug"]
+            for r in conn.execute("SELECT slug, path FROM people")
+            if r["path"] not in walked
+        ]
+        for slug in gone:
+            conn.execute("DELETE FROM people WHERE slug = ?", (slug,))
+        removed += len(gone)
+    return removed
+
+
 def build_all(
     conn: Connection,
     archive_root: Path,
@@ -144,6 +207,13 @@ def build_all(
         for p in it:
             index_person_file(conn, p, archive_root)
             stats["people"] += 1
+
+    # Purge rows whose source file vanished from the archive (upstream delete
+    # or rename). Without this, phantom records survive every reindex — even
+    # --full only ever INSERT-OR-REPLACEs what the walk finds.
+    stats["removed"] = _purge_missing(
+        conn, archive_resolved, bills=bills, events=events, people=people
+    )
 
     # Only a full rebuild guarantees every row matches the current schema
     # (incremental skips unchanged files, so new columns/tables may stay NULL

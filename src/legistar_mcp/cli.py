@@ -71,7 +71,8 @@ def index(archive_root: Path, db_path: Path, incremental: bool) -> None:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
     click.echo(
-        f"Indexed: bills={stats['bills']} events={stats['events']} people={stats['people']}"
+        f"Indexed: bills={stats['bills']} events={stats['events']} "
+        f"people={stats['people']} removed={stats['removed']}"
     )
 
 

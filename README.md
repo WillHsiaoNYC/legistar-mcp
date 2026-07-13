@@ -79,7 +79,7 @@ Then run a verification query to confirm it works.
 ```
 
 > [!TIP]
-> **What "done" looks like:** your AI reports something like `Indexed: bills=21270 events=17225 people=253` and confirms it's connected to your AI app. Total time ~3 minutes, most of it the 700 MB data download. After that, restart your AI app and start asking questions.
+> **What "done" looks like:** your AI reports something like `Indexed: bills=21270 events=17225 people=253 removed=0` and confirms it's connected to your AI app. Total time ~3 minutes, most of it the 700 MB data download. After that, restart your AI app and start asking questions.
 
 > [!WARNING]
 > **If you only use AI through a website** (claude.ai, chatgpt.com), it can't install things on your computer — use the manual install below.
@@ -105,7 +105,7 @@ legistar-mcp index --archive ./nyc_legislation --db ./legistar.db
 You should see:
 
 ```
-Indexed: bills=21270 events=17225 people=253
+Indexed: bills=21270 events=17225 people=253 removed=0
 ```
 
 Final folder layout:
@@ -271,8 +271,8 @@ cd ~/legistar/nyc_legislation && git pull
 cd ~/legistar && legistar-mcp index --archive ./nyc_legislation --db ./legistar.db
 ```
 
-Output: `Indexed: bills=N events=N people=247` where `N` is how many files
-changed since your last index — a few seconds when nothing changed, ~30s on
+Output: `Indexed: bills=N events=N people=247 removed=N` where `N` is how many
+files changed (or, for `removed`, vanished upstream) since your last index — a few seconds when nothing changed, ~30s on
 busy days, ~80s with `--full`. Default is `--incremental`; pass `--full` to
 rebuild from scratch.
 

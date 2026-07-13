@@ -119,3 +119,41 @@ def test_incremental_indexes_files_without_lastmodified(tmp_path, fixtures_root)
     build_all(conn, archive_root=archive, incremental=True)
     row = conn.execute("SELECT file FROM bills WHERE id = 999001").fetchone()
     assert row is not None and row["file"] == "Int 9990-2024"
+
+
+def test_removed_archive_files_are_purged_on_reindex(tmp_path, fixtures_root):
+    """Upstream deletes/renames a JSON → the row previously survived every
+    reindex (even --full), leaving phantom bills searchable forever."""
+    import shutil
+    from legistar_mcp.db import init_db
+
+    archive = tmp_path / "archive"
+    shutil.copytree(fixtures_root, archive)
+    conn = init_db(tmp_path / "t.db")
+    build_all(conn, archive_root=archive, incremental=False)
+    assert conn.execute(
+        "SELECT 1 FROM bills WHERE file = 'Int 0153-2022'"
+    ).fetchone() is not None
+
+    (archive / "bills" / "int_0153_2022.json").unlink()
+    stats = build_all(conn, archive_root=archive, incremental=False)
+
+    assert stats["removed"] >= 1
+    assert conn.execute(
+        "SELECT 1 FROM bills WHERE file = 'Int 0153-2022'"
+    ).fetchone() is None
+    # Cascade: no orphaned sponsors/votes/FTS-map rows may remain.
+    assert conn.execute(
+        "SELECT COUNT(*) FROM sponsors s LEFT JOIN bills b ON s.bill_id = b.id "
+        "WHERE b.id IS NULL"
+    ).fetchone()[0] == 0
+    assert conn.execute(
+        "SELECT COUNT(*) FROM bills_fts_map m LEFT JOIN bills b ON m.bill_id = b.id "
+        "WHERE b.id IS NULL"
+    ).fetchone()[0] == 0
+    # FTS content is gone too: an FTS-backed search must no longer surface the
+    # purged bill (behavioral check — robust even if other fixtures also match
+    # the phrase).
+    from legistar_mcp.tools.bills import search_bills
+    remaining = search_bills(conn, query='"domestic violence"', limit=10)
+    assert not any("0153-2022" in r["file"] for r in remaining)

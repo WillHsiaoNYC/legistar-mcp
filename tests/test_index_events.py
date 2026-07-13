@@ -214,3 +214,36 @@ def test_index_event_preserves_action_name_when_present(tmp_path, fixtures_root)
         "SELECT action_name FROM event_items WHERE item_id = 411101"
     ).fetchone()
     assert row2["action_name"] is None
+
+
+def test_agenda_sequence_zero_is_preserved(tmp_path, fixtures_root):
+    """`AgendaSequence or MinutesSequence or 0` discarded a legitimate 0 and
+    fell through to MinutesSequence."""
+    import json
+    import shutil
+    from legistar_mcp.db import init_db
+    from legistar_mcp.index.bulk import build_all
+
+    archive = tmp_path / "archive"
+    shutil.copytree(fixtures_root, archive)
+    event_file = next((archive / "events").rglob("*.json"))
+    e = json.loads(event_file.read_text())
+    items = e.get("Items") or []
+    assert items, "fixture event must have at least one item"
+    items[0]["AgendaSequence"] = 0
+    items[0]["MinutesSequence"] = 7  # the wrong fallback the bug would take
+    event_file.write_text(json.dumps(e))
+
+    conn = init_db(tmp_path / "t.db")
+    build_all(conn, archive_root=archive, incremental=False)
+    seq = conn.execute(
+        "SELECT item_sequence FROM event_items WHERE event_id = ? AND item_id = ?",
+        (e["ID"], items[0].get("ID")),
+    ).fetchone()
+    if seq is not None:  # item only mirrors when it has a MatterID
+        assert seq["item_sequence"] == 0
+    fts_seq = conn.execute(
+        "SELECT item_sequence FROM events_fts_map WHERE event_id = ? ORDER BY fts_rowid LIMIT 1",
+        (e["ID"],),
+    ).fetchone()
+    assert fts_seq["item_sequence"] == 0

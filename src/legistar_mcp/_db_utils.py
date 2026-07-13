@@ -1,7 +1,5 @@
 from sqlite3 import Connection
 
-from .db import SCHEMA_VERSION
-
 
 class StaleIndexError(RuntimeError):
     """Raised when a tool depends on schema introduced in a later release than
@@ -10,31 +8,31 @@ class StaleIndexError(RuntimeError):
 
 
 def _check_table_populated(
-    conn: Connection, table: str, related_table: str
+    conn: Connection, table: str, related_table: str, min_version: int
 ) -> None:
-    """Raise StaleIndexError if the user upgraded code (SCHEMA_VERSION) without
-    re-running --full (user_version stayed at an older value).
+    """Raise StaleIndexError if the DB was last fully indexed before the release
+    that introduced `table`.
+
+    `min_version` is the SCHEMA_VERSION that first shipped `table`. The gate is
+    per-feature, not global: a DB fully indexed at `min_version` (or later) is
+    complete for `table` even after the code's SCHEMA_VERSION has moved on for
+    unrelated reasons — a v3-complete DB must not be told its votes table is
+    broken just because an unrelated v4/v5 bump happened.
 
     Silent when:
-    - PRAGMA user_version >= SCHEMA_VERSION (DB matches code).
+    - PRAGMA user_version >= min_version (the release that introduced `table`
+      has been fully indexed).
     - The DB has never been indexed at all (related table empty —
       legitimately empty, not stale).
-
-    `table` and `related_table` are kept for diagnostic message clarity even
-    though the trigger condition no longer depends on row counts. The old
-    row-count heuristic conflated "stale" with "legitimately empty" — e.g.,
-    an archive with resolutions-only bills (no votes) or events with no
-    matter-id items would hit a false positive that --full couldn't fix.
     """
     current_version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if current_version >= SCHEMA_VERSION:
-        return  # DB is current — never stale.
+    if current_version >= min_version:
+        return  # the release that introduced `table` has been fully indexed
     # Don't bother people whose DB is just freshly initialized (no data yet).
     has_data = conn.execute(f"SELECT 1 FROM {related_table} LIMIT 1").fetchone()
     if not has_data:
         return
     raise StaleIndexError(
-        f"DB schema version is {current_version}, code expects {SCHEMA_VERSION}. "
-        f"The `{table}` table may be missing or incompletely populated. "
-        f"Run `legistar-mcp index --full` to backfill."
+        f"DB is at version {current_version}, `{table}` requires a full index "
+        f"from version {min_version}+. Run `legistar-mcp index --full` to backfill."
     )

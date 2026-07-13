@@ -15,21 +15,21 @@ def test_raises_stale_index_error_when_user_version_below_schema_version(
     # build_all bumps user_version to SCHEMA_VERSION. Force it back to simulate stale.
     conn.execute("PRAGMA user_version = 1")
     with pytest.raises(StaleIndexError, match="--full"):
-        _check_table_populated(conn, "event_items", "events")
+        _check_table_populated(conn, "event_items", "events", min_version=2)
 
 
 def test_silent_when_user_version_matches(tmp_path, fixtures_root):
     """After --full, user_version == SCHEMA_VERSION → silent."""
     conn = init_db(tmp_path / "t.db")
     build_all(conn, archive_root=fixtures_root, incremental=False)
-    _check_table_populated(conn, "event_items", "events")
+    _check_table_populated(conn, "event_items", "events", min_version=2)
 
 
 def test_silent_when_no_data_at_all(tmp_path):
     """Brand-new DB; user_version is 0 < SCHEMA_VERSION but related table is
     empty → silent (don't bother freshly-initialized DBs)."""
     conn = init_db(tmp_path / "t.db")
-    _check_table_populated(conn, "event_items", "events")
+    _check_table_populated(conn, "event_items", "events", min_version=2)
 
 
 def test_silent_when_target_empty_but_db_is_current(tmp_path, fixtures_root):
@@ -42,4 +42,18 @@ def test_silent_when_target_empty_but_db_is_current(tmp_path, fixtures_root):
     build_all(conn, archive_root=fixtures_root, incremental=False)
     # Wipe event_items even though we're current. Should not raise.
     conn.execute("DELETE FROM event_items")
-    _check_table_populated(conn, "event_items", "events")
+    _check_table_populated(conn, "event_items", "events", min_version=2)
+
+
+def test_stale_gate_is_per_feature_not_global(tmp_path, fixtures_root):
+    """A DB fully indexed at v3 (votes + event_items populated) must NOT raise
+    StaleIndexError for those tables when the code's global version moves to
+    5 for unrelated reasons."""
+
+    conn = init_db(tmp_path / "t.db")
+    build_all(conn, archive_root=fixtures_root, incremental=False)
+    conn.execute("PRAGMA user_version = 3")  # pretend last full index was v3
+    conn.commit()
+    # votes was introduced at v3; a v3 DB is complete for it — must not raise.
+    _check_table_populated(conn, "votes", "bills", min_version=3)
+    _check_table_populated(conn, "event_items", "events", min_version=2)

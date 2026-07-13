@@ -75,6 +75,22 @@ def build_all(
             f"Re-run with --full to fix."
         )
 
+    # Materialize the path generators so the progress bars know totals upfront.
+    bills = list(_bill_paths(archive_root))
+    events = list(_event_paths(archive_root))
+    people = list(_person_paths(archive_root))
+
+    # A wrong --archive path (e.g. the parent directory of the real clone)
+    # walks zero files and would otherwise "succeed" with bills=0, persist the
+    # junk path, and leave every tool returning [] with no diagnostic.
+    if not bills and not events and not people:
+        raise RuntimeError(
+            f"No archive content found under {archive_root}. Expected "
+            f"subdirectories like introduction/, resolution/, land_use/, "
+            f"events/, people/ (see jehiah/nyc_legislation). Check the "
+            f"--archive path."
+        )
+
     # Persist archive_root so query-time tools can resolve relative bills.path
     # back to the source JSON (needed for building snippets server-side, since
     # bills_fts is contentless and SQLite's snippet() returns NULL on it).
@@ -82,11 +98,6 @@ def build_all(
         "INSERT OR REPLACE INTO index_state (key, value) VALUES ('archive_root', ?)",
         (str(archive_root.resolve()),),
     )
-
-    # Materialize the path generators so the progress bars know totals upfront.
-    bills = list(_bill_paths(archive_root))
-    events = list(_event_paths(archive_root))
-    people = list(_person_paths(archive_root))
 
     seen_bills: dict[str, str | None] = {}
     seen_events: dict[str, str | None] = {}

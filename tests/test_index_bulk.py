@@ -90,3 +90,21 @@ def test_incremental_on_stale_populated_db_still_refused(tmp_path, fixtures_root
     conn.commit()
     with pytest.raises(RuntimeError, match="Re-run with --full"):
         build_all(conn, archive_root=fixtures_root, incremental=True)
+
+
+def test_empty_archive_dir_errors_instead_of_silent_success(tmp_path):
+    """Pointing --archive at an existing-but-wrong directory previously
+    'succeeded' with bills=0 and persisted the junk path. It must error."""
+    from legistar_mcp.db import init_db
+    import pytest
+    conn = init_db(tmp_path / "t.db")
+    wrong_dir = tmp_path / "not_an_archive"
+    wrong_dir.mkdir()
+    with pytest.raises(RuntimeError, match="No archive content"):
+        build_all(conn, archive_root=wrong_dir, incremental=False)
+    # Nothing persisted: no recorded archive_root, version not bumped.
+    row = conn.execute(
+        "SELECT value FROM index_state WHERE key = 'archive_root'"
+    ).fetchone()
+    assert row is None
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 0

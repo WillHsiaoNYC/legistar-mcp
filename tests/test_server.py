@@ -1,3 +1,4 @@
+import anyio
 import pytest
 
 from legistar_mcp.db import init_db
@@ -71,3 +72,22 @@ def test_make_server_fails_fast_when_db_lacks_archive_root(tmp_path, monkeypatch
 
     with pytest.raises(Exception, match="archive_root"):
         make_server()
+
+
+def test_tools_publish_param_descriptions_and_readonly_annotations(tmp_path, fixtures_root, monkeypatch):
+    from legistar_mcp.db import init_db
+    from legistar_mcp.index.bulk import build_all
+    from legistar_mcp.server import make_server
+
+    db = tmp_path / "t.db"
+    conn = init_db(db)
+    build_all(conn, archive_root=fixtures_root)
+    conn.close()
+    monkeypatch.setenv("LEGISTAR_DB_PATH", str(db))
+    server = make_server()
+    tools = anyio.run(server.list_tools)
+    assert tools
+    for t in tools:
+        assert t.annotations and t.annotations.readOnlyHint is True, t.name
+        for pname, pschema in t.inputSchema.get("properties", {}).items():
+            assert pschema.get("description"), f"{t.name}.{pname} lacks a description"

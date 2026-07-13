@@ -4,9 +4,17 @@ from pathlib import Path
 from sqlite3 import Connection
 
 from .._db_utils import _check_table_populated
-from ..agency import resolve_to_fts_query
 from ._aggregate import date_upper_bound, fts_join, run_aggregate
-from ._snippet import _archive_root, _build_snippet, _extract_phrases, _get_agencies
+from ._snippet import _archive_root, _build_snippet, snippet_phrases
+from ._validate import (
+    build_fts_query,
+    clamp_limit,
+    load_archive_json,
+    resolve_bill_id,
+    today_nyc,
+    validate_days,
+    validate_iso_date,
+)
 from .bills import _legistar_url as _legistar_url_bill
 
 # events_fts column order: item_title (0), agenda_note (1), minutes_note (2).
@@ -58,7 +66,7 @@ def _event_filters(
         where.append(clause)
         params.append(param)
     if committee:
-        where.append("events.body_name = ?")
+        where.append("events.body_name = ? COLLATE NOCASE")
         params.append(committee)
     return joins, where, params
 
@@ -72,10 +80,12 @@ def search_events(
     committee: str | None = None,
     limit: int = 20,
 ) -> list[dict]:
-    if agency:
-        query = resolve_to_fts_query(agency, _get_agencies())
+    limit = clamp_limit(limit)
+    date_from = validate_iso_date("date_from", date_from)
+    date_to = validate_iso_date("date_to", date_to)
+    fts_query = build_fts_query(conn, "events", query, agency)
 
-    joins, where, params = _event_filters(query, date_from, date_to, committee)
+    joins, where, params = _event_filters(fts_query, date_from, date_to, committee)
 
     sql = (
         "SELECT DISTINCT events.id, events.insite_url, events.body_name, events.date, events.location "
@@ -95,8 +105,8 @@ def search_events(
     # Agency mode: build per-event mentions by reading source JSON for each match.
     # A council meeting can have 100+ Items × 3 fields × N alias phrases; without
     # dedupe + cap, one search response could carry 10k+ near-identical snippets.
-    if agency and rows:
-        phrases = _extract_phrases(query) if query else []
+    if fts_query and rows:
+        phrases = snippet_phrases(fts_query, query)
         root = _archive_root(conn)
         ids = [r["id"] for r in rows]
         path_rows = {
@@ -137,12 +147,13 @@ def search_events(
     return rows
 
 
-def get_event(conn: Connection, archive_root: Path, id: int) -> dict | None:
+def get_event(conn: Connection, archive_root: Path, id: int) -> dict:
     row = conn.execute("SELECT path FROM events WHERE id = ?", (id,)).fetchone()
     if not row:
-        return None
-    with open(Path(archive_root) / row["path"], encoding="utf-8") as f:
-        event = json.load(f)
+        raise ValueError(
+            f"No event with id {id}. Find events via search_events or upcoming_events."
+        )
+    event = load_archive_json(archive_root, row["path"])
     event["LegistarURL"] = event.get("InSiteURL")
     return event
 
@@ -154,19 +165,21 @@ def upcoming_events(
     limit: int = 20,
 ) -> list[dict]:
     """Events in the next `days` days. Same row shape as search_events."""
-    today = _dt.date.today().isoformat()
+    limit = clamp_limit(limit)
+    days = validate_days(days)
+    today = today_nyc()
     # The last in-window day is today + days; date_upper_bound turns it into
     # the exclusive next-day bound so full ISO timestamps on that day (e.g.
     # "2024-08-15T13:30:00-04:00") still match the lex compare.
-    last_day = (_dt.date.today() + _dt.timedelta(days=days)).isoformat()
+    last_day = (today + _dt.timedelta(days=days)).isoformat()
     clause, cutoff = date_upper_bound("events.date", last_day)
     sql = (
         "SELECT events.id, events.insite_url, events.body_name, events.date, events.location "
         f"FROM events WHERE events.date >= ? AND {clause}"
     )
-    params: list = [today, cutoff]
+    params: list = [today.isoformat(), cutoff]
     if committee:
-        sql += " AND events.body_name = ?"
+        sql += " AND events.body_name = ? COLLATE NOCASE"
         params.append(committee)
     sql += " ORDER BY events.date ASC LIMIT ?"
     params.append(limit)
@@ -185,17 +198,10 @@ def get_bill_hearings(
 ) -> list[dict]:
     """Events where the given bill was on the agenda. Raises StaleIndexError
     if the event_items table is empty post-upgrade (run `--full` to fix)."""
+    limit = clamp_limit(limit)
     _check_table_populated(conn, "event_items", "events")
 
-    if file:
-        row = conn.execute("SELECT id FROM bills WHERE file = ?", (file,)).fetchone()
-        bill_id = row["id"] if row else None
-    elif id is not None:
-        bill_id = id
-    else:
-        raise ValueError("Must supply either `file` or `id`")
-    if bill_id is None:
-        return []
+    bill_id = resolve_bill_id(conn, file, id)
 
     sql = (
         "SELECT events.id, events.insite_url, events.body_name, events.date, "
@@ -206,7 +212,7 @@ def get_bill_hearings(
     params: list = [bill_id]
     if only_upcoming:
         sql += " AND events.date >= ?"
-        params.append(_dt.date.today().isoformat())
+        params.append(today_nyc().isoformat())
         # "Next hearing" semantics: nearest-future first. When only_upcoming
         # is False the caller is browsing history, so most-recent-first
         # (DESC) is the sensible default for that branch.
@@ -233,6 +239,7 @@ _EVENT_NON_NULL_COLS = {"event_year": "events.date", "event_month": "events.date
 def aggregate_events(
     conn: Connection,
     group_by: list[str],
+    query: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     committee: str | None = None,
@@ -250,8 +257,10 @@ def aggregate_events(
     A bare YYYY-MM-DD date_to covers the whole day (events store full ISO
     timestamps), so date_to='2024-12-31' counts every hearing on Dec 31.
     """
-    query = resolve_to_fts_query(agency, _get_agencies()) if agency else None
-    joins, where, params = _event_filters(query, date_from, date_to, committee)
+    date_from = validate_iso_date("date_from", date_from)
+    date_to = validate_iso_date("date_to", date_to)
+    fts_query = build_fts_query(conn, "events", query, agency)
+    joins, where, params = _event_filters(fts_query, date_from, date_to, committee)
 
     return run_aggregate(
         conn,

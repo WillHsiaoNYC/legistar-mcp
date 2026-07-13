@@ -136,7 +136,7 @@ def make_server() -> FastMCP:
 
     @server.tool()
     @_db_locked
-    def get_bill(file: str | None = None, id: int | None = None) -> dict | None:
+    def get_bill(file: str | None = None, id: int | None = None) -> dict:
         """Fetch a single bill's full record by file number (e.g., 'Int 1234-2024') or numeric ID."""
         return _get_bill(conn, archive_root, file=file, id=id)
 
@@ -152,7 +152,7 @@ def make_server() -> FastMCP:
 
     @server.tool()
     @_db_locked
-    def get_person(slug: str) -> dict | None:
+    def get_person(slug: str) -> dict:
         """Fetch a Council member's profile by slug."""
         return _get_person(conn, archive_root, slug)
 
@@ -179,7 +179,7 @@ def make_server() -> FastMCP:
 
     @server.tool()
     @_db_locked
-    def get_event(id: int) -> dict | None:
+    def get_event(id: int) -> dict:
         """Fetch a single event's full record by numeric ID."""
         return _get_event(conn, archive_root, id)
 
@@ -196,6 +196,7 @@ def make_server() -> FastMCP:
     @_db_locked
     def aggregate_bills(
         group_by: list[GroupByDim],
+        query: str | None = None,
         year_from: int | None = None,
         year_to: int | None = None,
         status: str | None = None,
@@ -205,10 +206,11 @@ def make_server() -> FastMCP:
         agency: str | None = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Group bills by one or more dimensions (status_name, type_name, body_name, sponsor_slug, intro_year) and return per-group counts. Supports search_bills filters."""
+        """Group bills by one or more dimensions (status_name, type_name, body_name, sponsor_slug, intro_year) and return per-group counts. Filters: query (free text), agency, year_from/year_to, status, type, committee, sponsor_slug."""
         return _aggregate_bills(
             conn,
             group_by=group_by,
+            query=query,
             year_from=year_from,
             year_to=year_to,
             status=status,
@@ -223,16 +225,18 @@ def make_server() -> FastMCP:
     @_db_locked
     def aggregate_events(
         group_by: list[EventGroupByDim],
+        query: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
         committee: str | None = None,
         agency: str | None = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Group events by one or more dimensions (body_name, event_year, event_month) and return per-group counts. Supports search_events filters (date_from/date_to/committee/agency)."""
+        """Group events by one or more dimensions (body_name, event_year, event_month) and return per-group counts. Filters: query (free text), agency, date_from/date_to, committee."""
         return _aggregate_events(
             conn,
             group_by=group_by,
+            query=query,
             date_from=date_from,
             date_to=date_to,
             committee=committee,
@@ -315,8 +319,14 @@ def make_server() -> FastMCP:
 
     @server.tool()
     @_db_locked
-    def vote_breakdown(bill_id: int, limit: int = 100) -> list[dict]:
+    def vote_breakdown(
+        bill_id: int | None = None,
+        file: str | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
         """Every council member's vote on a specific bill, sorted most-recent first.
+
+        Supply either numeric `bill_id` or bill `file` (e.g. 'Int 0153-2022').
 
         Returns rows with: person_slug, full_name (NULL if no people row indexed),
         vote_value, vote_date, event_id, action (e.g. 'Approved by Committee'),
@@ -324,7 +334,7 @@ def make_server() -> FastMCP:
         (rare) are placed last. Limit defaults to 100; raise it for omnibus
         bills with many vote rows.
         """
-        return _vote_breakdown(conn, bill_id=bill_id, limit=limit)
+        return _vote_breakdown(conn, bill_id=bill_id, file=file, limit=limit)
 
     return server
 

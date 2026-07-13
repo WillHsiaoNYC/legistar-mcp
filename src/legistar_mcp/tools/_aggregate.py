@@ -9,6 +9,8 @@ a date-boundary rule lands in one place instead of diverging between copies.
 import datetime as _dt
 from sqlite3 import Connection
 
+from ._validate import clamp_limit
+
 
 def fts_join(table: str, id_col: str) -> tuple[list[str], str]:
     """FTS5 join clauses + MATCH predicate for `{table}`.
@@ -79,9 +81,10 @@ def date_upper_bound(col: str, date_to: str) -> tuple[str, str]:
     - ``YYYY-MM``    → `col < {first of next month}`
     - ``YYYY``       → `col < {next Jan 1}`
 
-    A full timestamp, a malformed string, or a bound past year 9999 (where no
-    next-period boundary is representable — date.max + 1 day raises
-    OverflowError, not ValueError) is compared directly with `<=`.
+    A full timestamp, or a bound past year 9999 (where no next-period boundary
+    is representable — date.max + 1 day raises OverflowError, not ValueError),
+    is compared directly with `<=`. Malformed prefixes are rejected upstream by
+    validate_iso_date, so they raise here rather than silently falling back.
     Returns (clause, param).
     """
     try:
@@ -94,8 +97,8 @@ def date_upper_bound(col: str, date_to: str) -> tuple[str, str]:
             return f"{col} < ?", nxt.isoformat()
         if len(date_to) == 4 and date_to.isdigit() and int(date_to) < 9999:
             return f"{col} < ?", f"{int(date_to) + 1:04d}-01-01"
-    except (ValueError, OverflowError):
-        pass
+    except OverflowError:
+        pass  # year 9999: no next-period boundary is representable
     return f"{col} <= ?", date_to
 
 
@@ -126,6 +129,7 @@ def run_aggregate(
     lets SQLite skip per-group distinct tracking. Results are ordered by count
     desc with the grouping columns as a stable tie-break.
     """
+    limit = clamp_limit(limit, hi=1000)
     validate_group_by(group_by, set(dim_exprs))
     where = list(where)  # local copy — never mutate the caller's list
     if non_null_cols:

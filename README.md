@@ -230,8 +230,8 @@ Clone size: ~2 GB with full history, or ~700 MB with `--depth 1`.
 | `search_events` | Hearings/events by `query`, `agency`, `committee`, `date_from`, `date_to`. Includes per-item `mentions` snippets when `agency` is used. |
 | `get_event` | Full event record by numeric `id` — agenda items, minutes notes, votes. |
 | `list_committees` | All committees with bill + event counts, plus `first_bill_date` / `first_event_date` (earliest activity in the archive — a *lower bound*, not an establishment date). Optional `year_from` / `year_to` narrows both counts to a year window — useful for "most active committees last year". |
-| `aggregate_bills` | Per-group counts when bills are grouped by one or more dimensions (`status_name`, `type_name`, `body_name`, `sponsor_slug`, `intro_year`). Same filter surface as `search_bills`. |
-| `aggregate_events` | Per-group counts when events are grouped by one or more dimensions (`body_name`, `event_year`, `event_month`). Same filter surface as `search_events` (`date_from`/`date_to`/`committee`/`agency`). |
+| `aggregate_bills` | Per-group counts when bills are grouped by one or more dimensions (`status_name`, `type_name`, `body_name`, `sponsor_slug`, `intro_year`). Filters: `query` (free text), `agency`, `year_from`/`year_to`, `status`, `type`, `committee`, `sponsor_slug`. |
+| `aggregate_events` | Per-group counts when events are grouped by one or more dimensions (`body_name`, `event_year`, `event_month`). Filters: `query` (free text), `agency`, `date_from`/`date_to`, `committee`. |
 | `list_vocabulary` | Distinct non-null values for a known column (`status_name`, `type_name`, `body_name`, `event_committee`) — discover the exact spelling of statuses, types, and committees. |
 | `recent_bills` | Bills introduced within the last `days` days. Convenience wrapper; for agency-scoped searches use `search_bills(agency=...)`. |
 | `upcoming_events` | Events scheduled in the next `days` days. Optional `committee` body_name filter. |

@@ -66,13 +66,15 @@ def test_aggregate_bills_sponsor_slug_excludes_unsponsored_bills(indexed_db):
     assert all(r["sponsor_slug"] is not None for r in rows)
 
 
-def test_aggregate_bills_year_to_9999_returns_everything(indexed_db):
-    """year_to=9999 is a natural 'no upper bound' sentinel. The unpadded
-    boundary '10000-01-01' lex-sorts before every real date and silently
-    returned zero rows."""
+def test_aggregate_bills_year_to_9999_is_rejected(indexed_db):
+    """year_to=9999 was a 'no upper bound' sentinel at the year_window layer,
+    but validate_year now rejects any year outside [1900, 2100] before the
+    query is built — an out-of-range sentinel raises with guidance instead of
+    silently returning everything."""
     unfiltered = aggregate_bills(indexed_db, group_by=["intro_year"])
     assert unfiltered
-    assert aggregate_bills(indexed_db, group_by=["intro_year"], year_to=9999) == unfiltered
+    with pytest.raises(ValueError, match="4-digit year"):
+        aggregate_bills(indexed_db, group_by=["intro_year"], year_to=9999)
 
 
 def test_aggregate_bills_year_to_includes_dec_31(indexed_db):
@@ -89,3 +91,10 @@ def test_aggregate_bills_year_to_includes_dec_31(indexed_db):
     assert 2024 in by_year
     # Total includes our synthetic Dec 31 bill + at least the existing 2024 fixture.
     assert by_year[2024] >= 2
+
+
+def test_aggregate_bills_accepts_free_text_query(indexed_db):
+    from legistar_mcp.tools.bills import aggregate_bills
+    rows = aggregate_bills(indexed_db, group_by=["intro_year"], query="domestic violence")
+    assert rows, "FTS-filtered aggregate should find the 0153-2022 fixture"
+    assert all("intro_year" in r and "count" in r for r in rows)

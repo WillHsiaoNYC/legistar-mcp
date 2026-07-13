@@ -80,7 +80,7 @@ def test_upcoming_events_empty_when_no_future(indexed_db):
     assert upcoming_events(indexed_db, days=14) == []
 
 
-@freeze_time("2024-08-01")
+@freeze_time("2024-08-01 12:00:00")  # noon UTC = same NYC calendar day (Aug 1)
 def test_upcoming_events_includes_boundary_day(indexed_db):
     # Fixture event is 2024-08-15T13:30:00-04:00. Frozen 2024-08-01 + days=14
     # makes the cutoff day exactly 2024-08-15. The function must include
@@ -107,9 +107,10 @@ def test_get_bill_hearings_returns_event_for_known_bill(indexed_db):
     assert "legistar_url" in hit
 
 
-def test_get_bill_hearings_unknown_file_returns_empty(indexed_db):
+def test_get_bill_hearings_unknown_file_raises_value_error(indexed_db):
     from legistar_mcp.tools.events import get_bill_hearings
-    assert get_bill_hearings(indexed_db, file="Int 9999-9999") == []
+    with pytest.raises(ValueError, match="search_bills"):
+        get_bill_hearings(indexed_db, file="Int 9999-9999")
 
 
 def test_get_bill_hearings_requires_file_or_id(indexed_db):

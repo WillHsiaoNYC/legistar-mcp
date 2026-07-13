@@ -3,9 +3,17 @@ import json
 from pathlib import Path
 from sqlite3 import Connection
 
-from ..agency import resolve_to_fts_query
 from ._aggregate import fts_join, run_aggregate, year_window
-from ._snippet import _archive_root, _build_snippet, _extract_phrases, _get_agencies
+from ._snippet import _archive_root, _build_snippet, snippet_phrases
+from ._validate import (
+    build_fts_query,
+    clamp_limit,
+    load_archive_json,
+    resolve_bill_id,
+    today_nyc,
+    validate_days,
+    validate_year,
+)
 
 # Fields searched for snippet context. Matches the FTS column set, with
 # "text" mapped to the source JSON's "Text" key.
@@ -55,13 +63,13 @@ def _bill_filters(
     where += yclauses
     params += yparams
     if status:
-        where.append("bills.status_name = ?")
+        where.append("bills.status_name = ? COLLATE NOCASE")
         params.append(status)
     if type:
-        where.append("bills.type_name = ?")
+        where.append("bills.type_name = ? COLLATE NOCASE")
         params.append(type)
     if committee:
-        where.append("bills.body_name = ?")
+        where.append("bills.body_name = ? COLLATE NOCASE")
         params.append(committee)
     return joins, where, params
 
@@ -78,10 +86,12 @@ def search_bills(
     sponsor_slug: str | None = None,
     limit: int = 20,
 ) -> list[dict]:
-    if agency:
-        query = resolve_to_fts_query(agency, _get_agencies())
+    limit = clamp_limit(limit)
+    year_from = validate_year("year_from", year_from)
+    year_to = validate_year("year_to", year_to)
+    fts_query = build_fts_query(conn, "bills", query, agency)
 
-    joins, where, params = _bill_filters(query, year_from, year_to, status, type, committee)
+    joins, where, params = _bill_filters(fts_query, year_from, year_to, status, type, committee)
     if sponsor_slug:
         joins.append("JOIN sponsors s ON bills.id = s.bill_id")
         where.append("s.person_slug = ?")
@@ -104,8 +114,8 @@ def search_bills(
         r.pop("guid", None)
         r["legistar_url"] = _legistar_url(r.get("id"))
 
-    if agency and rows:
-        phrases = _extract_phrases(query) if query else []
+    if fts_query and rows:
+        phrases = snippet_phrases(fts_query, query)
         root = _archive_root(conn)
         path_rows = {
             r["id"]: r["path"]
@@ -141,17 +151,12 @@ def get_bill(
     archive_root: Path,
     file: str | None = None,
     id: int | None = None,
-) -> dict | None:
-    if file:
-        row = conn.execute("SELECT path FROM bills WHERE file = ?", (file,)).fetchone()
-    elif id is not None:
-        row = conn.execute("SELECT path FROM bills WHERE id = ?", (id,)).fetchone()
-    else:
-        raise ValueError("Must supply either `file` or `id`")
+) -> dict:
+    bill_id = resolve_bill_id(conn, file, id)
+    row = conn.execute("SELECT path FROM bills WHERE id = ?", (bill_id,)).fetchone()
     if not row:
-        return None
-    with open(Path(archive_root) / row["path"], encoding="utf-8") as f:
-        bill = json.load(f)
+        raise ValueError(f"No bill with id {bill_id}. Find bills via search_bills.")
+    bill = load_archive_json(archive_root, row["path"])
     bill["LegistarURL"] = _legistar_url(bill.get("ID"))
     return bill
 
@@ -177,6 +182,7 @@ _BILL_NON_NULL_COLS = {
 def aggregate_bills(
     conn: Connection,
     group_by: list[str],
+    query: str | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
     status: str | None = None,
@@ -197,8 +203,10 @@ def aggregate_bills(
     one slug). Passing agency triggers an FTS5 join that may slow large
     aggregations; bound results with `limit`.
     """
-    query = resolve_to_fts_query(agency, _get_agencies()) if agency else None
-    joins, where, params = _bill_filters(query, year_from, year_to, status, type, committee)
+    year_from = validate_year("year_from", year_from)
+    year_to = validate_year("year_to", year_to)
+    fts_query = build_fts_query(conn, "bills", query, agency)
+    joins, where, params = _bill_filters(fts_query, year_from, year_to, status, type, committee)
     if "sponsor_slug" in group_by or sponsor_slug:
         joins.append("LEFT JOIN sponsors s ON bills.id = s.bill_id")
     if sponsor_slug:
@@ -233,7 +241,9 @@ def recent_bills(
     (ORDER BY intro_date DESC). Use search_bills(year_to=...) for a
     precise bounded window.
     """
-    cutoff = (_dt.date.today() - _dt.timedelta(days=days)).isoformat()
+    limit = clamp_limit(limit)
+    days = validate_days(days)
+    cutoff = (today_nyc() - _dt.timedelta(days=days)).isoformat()
     sql = (
         "SELECT DISTINCT bills.id, bills.guid, bills.file, bills.title, "
         "bills.summary, bills.status_name, bills.type_name, bills.body_name, "
@@ -241,10 +251,10 @@ def recent_bills(
     )
     params: list = [cutoff]
     if status:
-        sql += " AND bills.status_name = ?"
+        sql += " AND bills.status_name = ? COLLATE NOCASE"
         params.append(status)
     if type:
-        sql += " AND bills.type_name = ?"
+        sql += " AND bills.type_name = ? COLLATE NOCASE"
         params.append(type)
     sql += " ORDER BY bills.intro_date DESC LIMIT ?"
     params.append(limit)

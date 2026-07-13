@@ -1,6 +1,7 @@
 from sqlite3 import Connection
 
 from ._aggregate import year_window
+from ._validate import validate_year
 
 
 def list_committees(
@@ -24,6 +25,9 @@ def list_committees(
     Committees that pre-date the archive (1996) or that were renamed will
     show a misleading-looking earliest date; treat as a lower bound.
     """
+    year_from = validate_year("year_from", year_from)
+    year_to = validate_year("year_to", year_to)
+
     # UNION ALL portable to SQLite 3.7+. FULL OUTER JOIN would be cleaner
     # but isn't available before SQLite 3.39, and CPython on Linux uses the
     # system libsqlite3 (Ubuntu 22.04 ships 3.37, RHEL 9 ships 3.34) — so we

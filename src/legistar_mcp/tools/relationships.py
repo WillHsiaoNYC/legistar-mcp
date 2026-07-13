@@ -2,12 +2,15 @@ from sqlite3 import Connection
 
 from .._db_utils import _check_table_populated
 from ._aggregate import year_window
+from ._validate import clamp_limit, require_known_slug, resolve_bill_id, validate_year
 
 
 def co_sponsors(
     conn: Connection, slug: str, min_overlap: int = 5, limit: int = 20
 ) -> list[dict]:
     """Return council members who have co-sponsored the most bills with `slug`."""
+    limit = clamp_limit(limit)
+    require_known_slug(conn, slug)
     sql = """
         SELECT s2.person_slug AS slug,
                COALESCE(p.full_name, s2.person_slug) AS full_name,
@@ -34,6 +37,10 @@ def get_voting_record(
 ) -> list[dict]:
     """Every vote cast by `slug`, optionally filtered by year and outcome.
     Raises StaleIndexError if the votes table is empty post-upgrade."""
+    limit = clamp_limit(limit, hi=1000)
+    require_known_slug(conn, slug)
+    year_from = validate_year("year_from", year_from)
+    year_to = validate_year("year_to", year_to)
     _check_table_populated(conn, "votes", "bills")
 
     sql = (
@@ -56,8 +63,16 @@ def get_voting_record(
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
-def vote_breakdown(conn: Connection, bill_id: int, limit: int = 100) -> list[dict]:
+def vote_breakdown(
+    conn: Connection,
+    bill_id: int | None = None,
+    file: str | None = None,
+    limit: int = 100,
+) -> list[dict]:
     """Every council member's vote on a specific bill, across all history records.
+
+    Identify the bill by numeric `bill_id` OR by `file` (e.g. 'Int 0153-2022');
+    an unknown `file` raises a guided ValueError instead of an empty result.
 
     Returns rows with seven columns:
       - person_slug
@@ -77,6 +92,8 @@ def vote_breakdown(conn: Connection, bill_id: int, limit: int = 100) -> list[dic
     Raises StaleIndexError if the votes table is empty post-upgrade (run
     `--full` to backfill).
     """
+    limit = clamp_limit(limit, hi=1000)
+    bill_id = resolve_bill_id(conn, file, bill_id)
     _check_table_populated(conn, "votes", "bills")
 
     # `v.vote_date IS NULL` is 0 for not-null and 1 for null, so adding it as

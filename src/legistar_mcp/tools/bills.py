@@ -114,8 +114,10 @@ def search_bills(
         r.pop("guid", None)
         r["legistar_url"] = _legistar_url(r.get("id"))
 
-    if agency and rows:
-        phrases = _extract_phrases(fts_query or "")
+    if fts_query and rows:
+        phrases = _extract_phrases(fts_query)
+        if query and query.strip():
+            phrases.append(query.strip())
         root = _archive_root(conn)
         path_rows = {
             r["id"]: r["path"]

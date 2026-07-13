@@ -105,8 +105,10 @@ def search_events(
     # Agency mode: build per-event mentions by reading source JSON for each match.
     # A council meeting can have 100+ Items × 3 fields × N alias phrases; without
     # dedupe + cap, one search response could carry 10k+ near-identical snippets.
-    if agency and rows:
-        phrases = _extract_phrases(fts_query or "")
+    if fts_query and rows:
+        phrases = _extract_phrases(fts_query)
+        if query and query.strip():
+            phrases.append(query.strip())
         root = _archive_root(conn)
         ids = [r["id"] for r in rows]
         path_rows = {

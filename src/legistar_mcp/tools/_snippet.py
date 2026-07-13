@@ -39,18 +39,21 @@ def _extract_phrases(fts_query: str) -> list[str]:
 def _build_snippet(
     text: str, phrases: list[str], window: int = 120
 ) -> str | None:
-    lo = text.lower()
+    # re.IGNORECASE keeps match offsets in the ORIGINAL string. Computing
+    # offsets on text.lower() shifted them whenever lowercasing changes
+    # length (e.g. 'İ' → 'i̇'), corrupting the <mark> placement.
     for phrase in phrases:
-        idx = lo.find(phrase.lower())
-        if idx >= 0:
+        m = re.search(re.escape(phrase), text, re.IGNORECASE)
+        if m:
+            idx, match_end = m.start(), m.end()
             start = max(0, idx - window)
-            end = min(len(text), idx + len(phrase) + window)
+            end = min(len(text), match_end + window)
             prefix = "..." if start > 0 else ""
             suffix = "..." if end < len(text) else ""
             # Escape segments before wrapping so source text containing `<`/`>`
             # doesn't corrupt rendering in HTML/Markdown-aware MCP clients.
             head = html.escape(text[start:idx])
-            match = html.escape(text[idx : idx + len(phrase)])
-            tail = html.escape(text[idx + len(phrase) : end])
+            match = html.escape(text[idx:match_end])
+            tail = html.escape(text[match_end:end])
             return f"{prefix}{head}<mark>{match}</mark>{tail}{suffix}"
     return None

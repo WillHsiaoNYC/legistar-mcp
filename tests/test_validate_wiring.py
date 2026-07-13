@@ -125,3 +125,22 @@ def test_search_people_matches_across_middle_initial(indexed_db):
     # full_name is 'Adrienne E. Adams' — a single-substring LIKE missed this.
     hits = search_people(indexed_db, name="Adrienne Adams")
     assert any(p["slug"] == "adrienne-e-adams" for p in hits)
+
+
+def test_snippet_offsets_survive_unicode_case_folding():
+    from legistar_mcp.tools._snippet import _build_snippet
+    # 'İ' (U+0130) lowercases to TWO chars — index math on text.lower()
+    # previously misplaced the <mark>.
+    text = "İİİİİ the police department shall report annually İİİİİ"
+    snip = _build_snippet(text, ["police department"])
+    assert snip is not None
+    assert "<mark>police department</mark>" in snip
+
+
+def test_plain_query_search_returns_mentions(indexed_db):
+    rows = search_bills(indexed_db, query='"domestic violence"', limit=5)
+    hit = next(r for r in rows if "0153-2022" in r["file"])
+    assert hit["mentions"], "plain-text query should carry role-context snippets too"
+    rows_bare = search_bills(indexed_db, query="domestic violence", limit=5)
+    hit_bare = next(r for r in rows_bare if "0153-2022" in r["file"])
+    assert hit_bare["mentions"]

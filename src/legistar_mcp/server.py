@@ -119,7 +119,8 @@ def make_server() -> FastMCP:
         committee: str | None = None,
         sponsor_slug: str | None = None,
         limit: int = 20,
-    ) -> list[dict]:
+        offset: int = 0,
+    ) -> dict:
         """Search NYC Council bills by free-text query, agency, year range, status, type, committee, or sponsor."""
         return _search_bills(
             conn,
@@ -132,6 +133,7 @@ def make_server() -> FastMCP:
             committee=committee,
             sponsor_slug=sponsor_slug,
             limit=limit,
+            offset=offset,
         )
 
     @server.tool()
@@ -146,9 +148,12 @@ def make_server() -> FastMCP:
         name: str | None = None,
         active_only: bool = False,
         limit: int = 20,
-    ) -> list[dict]:
+        offset: int = 0,
+    ) -> dict:
         """Search Council members by name; optionally filter to currently active members."""
-        return _search_people(conn, name=name, active_only=active_only, limit=limit)
+        return _search_people(
+            conn, name=name, active_only=active_only, limit=limit, offset=offset
+        )
 
     @server.tool()
     @_db_locked
@@ -165,7 +170,8 @@ def make_server() -> FastMCP:
         date_to: str | None = None,
         committee: str | None = None,
         limit: int = 20,
-    ) -> list[dict]:
+        offset: int = 0,
+    ) -> dict:
         """Search committee hearings/events by query, agency, date range, or committee."""
         return _search_events(
             conn,
@@ -175,6 +181,7 @@ def make_server() -> FastMCP:
             date_to=date_to,
             committee=committee,
             limit=limit,
+            offset=offset,
         )
 
     @server.tool()
@@ -188,7 +195,7 @@ def make_server() -> FastMCP:
     def list_committees(
         year_from: int | None = None,
         year_to: int | None = None,
-    ) -> list[dict]:
+    ) -> dict:
         """List all committees with bill/event counts and first-seen dates. Optional year_from/year_to narrows both counts to that inclusive year window — useful for 'most active committees last year' style questions."""
         return _list_committees(conn, year_from=year_from, year_to=year_to)
 
@@ -205,7 +212,8 @@ def make_server() -> FastMCP:
         sponsor_slug: str | None = None,
         agency: str | None = None,
         limit: int = 100,
-    ) -> list[dict]:
+        offset: int = 0,
+    ) -> dict:
         """Group bills by one or more dimensions (status_name, type_name, body_name, sponsor_slug, intro_year) and return per-group counts. Filters: query (free text), agency, year_from/year_to, status, type, committee, sponsor_slug."""
         return _aggregate_bills(
             conn,
@@ -219,6 +227,7 @@ def make_server() -> FastMCP:
             sponsor_slug=sponsor_slug,
             agency=agency,
             limit=limit,
+            offset=offset,
         )
 
     @server.tool()
@@ -231,7 +240,8 @@ def make_server() -> FastMCP:
         committee: str | None = None,
         agency: str | None = None,
         limit: int = 100,
-    ) -> list[dict]:
+        offset: int = 0,
+    ) -> dict:
         """Group events by one or more dimensions (body_name, event_year, event_month) and return per-group counts. Filters: query (free text), agency, date_from/date_to, committee."""
         return _aggregate_events(
             conn,
@@ -242,6 +252,7 @@ def make_server() -> FastMCP:
             committee=committee,
             agency=agency,
             limit=limit,
+            offset=offset,
         )
 
     @server.tool()
@@ -257,9 +268,12 @@ def make_server() -> FastMCP:
         status: str | None = None,
         type: str | None = None,
         limit: int = 20,
-    ) -> list[dict]:
+        offset: int = 0,
+    ) -> dict:
         """Bills introduced within the last `days` days. Convenience wrapper — for agency-scoped searches use search_bills(agency=...) instead."""
-        return _recent_bills(conn, days=days, status=status, type=type, limit=limit)
+        return _recent_bills(
+            conn, days=days, status=status, type=type, limit=limit, offset=offset
+        )
 
     @server.tool()
     @_db_locked
@@ -267,9 +281,12 @@ def make_server() -> FastMCP:
         days: int = 14,
         committee: str | None = None,
         limit: int = 20,
-    ) -> list[dict]:
+        offset: int = 0,
+    ) -> dict:
         """Events scheduled in the next `days` days. Filter by committee body_name."""
-        return _upcoming_events(conn, days=days, committee=committee, limit=limit)
+        return _upcoming_events(
+            conn, days=days, committee=committee, limit=limit, offset=offset
+        )
 
     @server.tool()
     @_db_locked
@@ -277,9 +294,12 @@ def make_server() -> FastMCP:
         slug: str,
         min_overlap: int = 5,
         limit: int = 20,
-    ) -> list[dict]:
+        offset: int = 0,
+    ) -> dict:
         """Council members who have co-sponsored the most bills with a given person (by slug). Returns slug, full_name, and overlap_count, sorted by overlap_count DESC."""
-        return _co_sponsors(conn, slug=slug, min_overlap=min_overlap, limit=limit)
+        return _co_sponsors(
+            conn, slug=slug, min_overlap=min_overlap, limit=limit, offset=offset
+        )
 
     @server.tool()
     @_db_locked
@@ -288,13 +308,16 @@ def make_server() -> FastMCP:
         id: int | None = None,
         only_upcoming: bool = False,
         limit: int = 20,
-    ) -> list[dict]:
+        offset: int = 0,
+    ) -> dict:
         """Events where a given bill was on the agenda. Supply either bill `file` (e.g., 'Int 0153-2022') or numeric `id`. Set `only_upcoming=True` to filter to future events."""
-        return _get_bill_hearings(conn, file=file, id=id, only_upcoming=only_upcoming, limit=limit)
+        return _get_bill_hearings(
+            conn, file=file, id=id, only_upcoming=only_upcoming, limit=limit, offset=offset
+        )
 
     @server.tool()
     @_db_locked
-    def get_event_bills(event_id: int) -> list[dict]:
+    def get_event_bills(event_id: int) -> dict:
         """Bills on the agenda for a specific event. Returns rows sorted by item_sequence ascending."""
         return _get_event_bills(conn, event_id=event_id)
 
@@ -306,7 +329,8 @@ def make_server() -> FastMCP:
         year_to: int | None = None,
         vote_value: str | None = None,
         limit: int = 100,
-    ) -> list[dict]:
+        offset: int = 0,
+    ) -> dict:
         """Every vote cast by a council member (by `slug`), optionally filtered by year range and vote_value (e.g., 'Affirmative', 'Negative', 'Absent'). Returns vote_value, vote_date, bill context."""
         return _get_voting_record(
             conn,
@@ -315,6 +339,7 @@ def make_server() -> FastMCP:
             year_to=year_to,
             vote_value=vote_value,
             limit=limit,
+            offset=offset,
         )
 
     @server.tool()
@@ -323,7 +348,8 @@ def make_server() -> FastMCP:
         bill_id: int | None = None,
         file: str | None = None,
         limit: int = 100,
-    ) -> list[dict]:
+        offset: int = 0,
+    ) -> dict:
         """Every council member's vote on a specific bill, sorted most-recent first.
 
         Supply either numeric `bill_id` or bill `file` (e.g. 'Int 0153-2022').
@@ -334,7 +360,7 @@ def make_server() -> FastMCP:
         (rare) are placed last. Limit defaults to 100; raise it for omnibus
         bills with many vote rows.
         """
-        return _vote_breakdown(conn, bill_id=bill_id, file=file, limit=limit)
+        return _vote_breakdown(conn, bill_id=bill_id, file=file, limit=limit, offset=offset)
 
     return server
 

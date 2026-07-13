@@ -10,6 +10,8 @@ from ._snippet import _archive_root, _build_snippet, snippet_phrases
 from ._validate import (
     build_fts_query,
     clamp_limit,
+    clamp_offset,
+    envelope,
     load_archive_json,
     resolve_bill_id,
     today_nyc,
@@ -80,8 +82,10 @@ def search_events(
     date_to: str | None = None,
     committee: str | None = None,
     limit: int = 20,
-) -> list[dict]:
+    offset: int = 0,
+) -> dict:
     limit = clamp_limit(limit)
+    offset = clamp_offset(offset)
     date_from = validate_iso_date("date_from", date_from)
     date_to = validate_iso_date("date_to", date_to)
     fts_query = build_fts_query(conn, "events", query, agency)
@@ -96,8 +100,17 @@ def search_events(
         sql += " " + " ".join(joins)
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY events.date DESC LIMIT ?"
-    params.append(limit)
+
+    # COUNT over the same FROM/JOIN/WHERE, before LIMIT/OFFSET are appended.
+    count_sql = "SELECT COUNT(DISTINCT events.id) FROM events"
+    if joins:
+        count_sql += " " + " ".join(joins)
+    if where:
+        count_sql += " WHERE " + " AND ".join(where)
+    total = conn.execute(count_sql, params).fetchone()[0]
+
+    sql += " ORDER BY events.date DESC LIMIT ? OFFSET ?"
+    params += [limit, offset]
 
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     for r in rows:
@@ -145,7 +158,7 @@ def search_events(
                                 break
             r["mentions"] = mentions
 
-    return rows
+    return envelope(rows, total, offset)
 
 
 def get_event(conn: Connection, archive_root: Path, id: int) -> dict:
@@ -164,9 +177,11 @@ def upcoming_events(
     days: int = 14,
     committee: str | None = None,
     limit: int = 20,
-) -> list[dict]:
+    offset: int = 0,
+) -> dict:
     """Events in the next `days` days. Same row shape as search_events."""
     limit = clamp_limit(limit)
+    offset = clamp_offset(offset)
     days = validate_days(days)
     today = today_nyc()
     # The last in-window day is today + days; date_upper_bound turns it into
@@ -174,20 +189,21 @@ def upcoming_events(
     # "2024-08-15T13:30:00-04:00") still match the lex compare.
     last_day = (today + _dt.timedelta(days=days)).isoformat()
     clause, cutoff = date_upper_bound("events.date", last_day)
-    sql = (
-        "SELECT events.id, events.insite_url, events.body_name, events.date, events.location "
-        f"FROM events WHERE events.date >= ? AND {clause}"
-    )
+    where = ["events.date >= ?", clause]
     params: list = [today.isoformat(), cutoff]
     if committee:
-        sql += " AND events.body_name = ? COLLATE NOCASE"
+        where.append("events.body_name = ? COLLATE NOCASE")
         params.append(committee)
-    sql += " ORDER BY events.date ASC LIMIT ?"
-    params.append(limit)
-    rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    where_clause = " WHERE " + " AND ".join(where)
+    total = conn.execute("SELECT COUNT(*) FROM events" + where_clause, params).fetchone()[0]
+    sql = (
+        "SELECT events.id, events.insite_url, events.body_name, events.date, events.location "
+        "FROM events" + where_clause + " ORDER BY events.date ASC LIMIT ? OFFSET ?"
+    )
+    rows = [dict(r) for r in conn.execute(sql, [*params, limit, offset]).fetchall()]
     for r in rows:
         r["legistar_url"] = r.pop("insite_url", None)
-    return rows
+    return envelope(rows, total, offset)
 
 
 def get_bill_hearings(
@@ -196,35 +212,40 @@ def get_bill_hearings(
     id: int | None = None,
     only_upcoming: bool = False,
     limit: int = 20,
-) -> list[dict]:
+    offset: int = 0,
+) -> dict:
     """Events where the given bill was on the agenda. Raises StaleIndexError
     if the event_items table is empty post-upgrade (run `--full` to fix)."""
     limit = clamp_limit(limit)
+    offset = clamp_offset(offset)
     _check_table_populated(conn, "event_items", "events", min_version=EVENT_ITEMS_MIN_VERSION)
 
     bill_id = resolve_bill_id(conn, file, id)
 
-    sql = (
-        "SELECT events.id, events.insite_url, events.body_name, events.date, "
-        "events.location, ei.item_title, ei.item_sequence, ei.action_name "
+    from_where = (
         "FROM event_items ei JOIN events ON ei.event_id = events.id "
         "WHERE ei.bill_id = ?"
     )
     params: list = [bill_id]
     if only_upcoming:
-        sql += " AND events.date >= ?"
+        from_where += " AND events.date >= ?"
         params.append(today_nyc().isoformat())
         # "Next hearing" semantics: nearest-future first. When only_upcoming
         # is False the caller is browsing history, so most-recent-first
         # (DESC) is the sensible default for that branch.
-        sql += " ORDER BY events.date ASC, ei.item_sequence ASC LIMIT ?"
+        order = " ORDER BY events.date ASC, ei.item_sequence ASC"
     else:
-        sql += " ORDER BY events.date DESC, ei.item_sequence ASC LIMIT ?"
-    params.append(limit)
-    rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+        order = " ORDER BY events.date DESC, ei.item_sequence ASC"
+    total = conn.execute("SELECT COUNT(*) " + from_where, params).fetchone()[0]
+    sql = (
+        "SELECT events.id, events.insite_url, events.body_name, events.date, "
+        "events.location, ei.item_title, ei.item_sequence, ei.action_name "
+        + from_where + order + " LIMIT ? OFFSET ?"
+    )
+    rows = [dict(r) for r in conn.execute(sql, [*params, limit, offset]).fetchall()]
     for r in rows:
         r["legistar_url"] = r.pop("insite_url", None)
-    return rows
+    return envelope(rows, total, offset)
 
 
 _EVENT_DIM_EXPRS = {
@@ -246,7 +267,8 @@ def aggregate_events(
     committee: str | None = None,
     agency: str | None = None,
     limit: int = 100,
-) -> list[dict]:
+    offset: int = 0,
+) -> dict:
     """Group events by one or more dimensions and return per-group counts.
 
     Allowed group_by values: body_name, event_year, event_month. Filters mirror
@@ -272,11 +294,12 @@ def aggregate_events(
         where=where,
         params=params,
         limit=limit,
+        offset=offset,
         non_null_cols=_EVENT_NON_NULL_COLS,
     )
 
 
-def get_event_bills(conn: Connection, event_id: int) -> list[dict]:
+def get_event_bills(conn: Connection, event_id: int) -> dict:
     """Bills on the agenda for a specific event. Raises StaleIndexError if
     the event_items table is empty post-upgrade."""
     _check_table_populated(conn, "event_items", "events", min_version=EVENT_ITEMS_MIN_VERSION)
@@ -290,4 +313,4 @@ def get_event_bills(conn: Connection, event_id: int) -> list[dict]:
     rows = [dict(r) for r in conn.execute(sql, (event_id,)).fetchall()]
     for r in rows:
         r["legistar_url"] = _legistar_url_bill(r.get("id"))
-    return rows
+    return envelope(rows, len(rows))

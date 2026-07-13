@@ -14,14 +14,14 @@ def indexed_db(tmp_path, fixtures_root):
 
 
 def test_search_events_returns_rows(indexed_db):
-    results = search_events(indexed_db, limit=5)
+    results = search_events(indexed_db, limit=5)["results"]
     assert len(results) >= 1
     assert "date" in results[0]
     assert "body_name" in results[0]
 
 
 def test_search_events_filters_by_date_range(indexed_db):
-    results = search_events(indexed_db, date_from="2024-01-01", limit=5)
+    results = search_events(indexed_db, date_from="2024-01-01", limit=5)["results"]
     assert all(r["date"] >= "2024-01-01" for r in results)
 
 
@@ -29,7 +29,7 @@ def test_search_events_date_filter_rejects_out_of_range(indexed_db):
     # The fixture event is from 2024; a 2099 floor must exclude it.
     # This exercises the rejection path the previous test couldn't (only
     # one fixture row meant the >= constraint passed trivially).
-    results = search_events(indexed_db, date_from="2099-01-01", limit=5)
+    results = search_events(indexed_db, date_from="2099-01-01", limit=5)["results"]
     assert results == []
 
 
@@ -38,7 +38,7 @@ def test_search_events_date_to_includes_boundary_day(indexed_db):
     # A date-only date_to of that same day must still include it — a raw lex
     # `events.date <= '2024-08-15'` would drop it because the timestamp sorts
     # after the bare date.
-    results = search_events(indexed_db, date_to="2024-08-15", limit=5)
+    results = search_events(indexed_db, date_to="2024-08-15", limit=5)["results"]
     assert any(r["id"] == 21015 for r in results)
 
 
@@ -47,12 +47,12 @@ def test_search_events_date_to_full_timestamp_still_excludes_later(indexed_db):
     # whole-day expansion only applies to bare YYYY-MM-DD).
     results = search_events(
         indexed_db, date_to="2024-08-15T12:00:00-04:00", limit=5
-    )
+    )["results"]
     assert all(r["id"] != 21015 for r in results)
 
 
 def test_search_events_results_include_legistar_url(indexed_db):
-    results = search_events(indexed_db, limit=5)
+    results = search_events(indexed_db, limit=5)["results"]
     assert results
     hit = results[0]
     # Event JSON ships an authoritative InSiteURL field with a different
@@ -69,7 +69,7 @@ def test_search_events_results_include_legistar_url(indexed_db):
 @freeze_time("2024-08-01")
 def test_upcoming_events_within_window(indexed_db):
     # Fixture event is 2024-08-15. Frozen 2024-08-01 + days=30 catches it.
-    results = upcoming_events(indexed_db, days=30, limit=10)
+    results = upcoming_events(indexed_db, days=30, limit=10)["results"]
     assert results
     assert all(r["date"] >= "2024-08-01" for r in results)
 
@@ -77,7 +77,7 @@ def test_upcoming_events_within_window(indexed_db):
 @freeze_time("2024-08-20")
 def test_upcoming_events_empty_when_no_future(indexed_db):
     # Past the fixture event's date — empty.
-    assert upcoming_events(indexed_db, days=14) == []
+    assert upcoming_events(indexed_db, days=14)["results"] == []
 
 
 @freeze_time("2024-08-01 12:00:00")  # noon UTC = same NYC calendar day (Aug 1)
@@ -86,20 +86,20 @@ def test_upcoming_events_includes_boundary_day(indexed_db):
     # makes the cutoff day exactly 2024-08-15. The function must include
     # events whose date STARTS with that day even though the stored value is
     # a full ISO timestamp lex-greater than "2024-08-15".
-    results = upcoming_events(indexed_db, days=14, limit=10)
+    results = upcoming_events(indexed_db, days=14, limit=10)["results"]
     assert any(r["date"].startswith("2024-08-15") for r in results)
 
 
 @freeze_time("2024-08-01")
 def test_upcoming_events_have_legistar_url(indexed_db):
-    results = upcoming_events(indexed_db, days=30)
+    results = upcoming_events(indexed_db, days=30)["results"]
     assert results and "legistar_url" in results[0]
 
 
 def test_get_bill_hearings_returns_event_for_known_bill(indexed_db):
     """The fixture event has 3 bill-bearing items; querying by Int 0153-2022 returns the event."""
     from legistar_mcp.tools.events import get_bill_hearings
-    results = get_bill_hearings(indexed_db, file="Int 0153-2022")
+    results = get_bill_hearings(indexed_db, file="Int 0153-2022")["results"]
     assert any(r["id"] == 21015 for r in results)
     hit = next(r for r in results if r["id"] == 21015)
     assert hit["action_name"] == "Hearing Held by Committee"
@@ -167,14 +167,14 @@ def test_get_bill_hearings_only_upcoming_sorts_earliest_first(indexed_db):
         )
     indexed_db.commit()
 
-    results = get_bill_hearings(indexed_db, id=68628, only_upcoming=True)
+    results = get_bill_hearings(indexed_db, id=68628, only_upcoming=True)["results"]
     future_ids = [r["id"] for r in results if r["id"] in {90001, 90002, 90003}]
     assert future_ids == [90002, 90001, 90003]  # ASC by date
 
 
 def test_get_event_bills_returns_bills_for_known_event(indexed_db):
     from legistar_mcp.tools.events import get_event_bills
-    results = get_event_bills(indexed_db, event_id=21015)
+    results = get_event_bills(indexed_db, event_id=21015)["results"]
     # Fixture event has 3 bill-bearing items
     assert len(results) == 3
     files = {r["file"] for r in results}
@@ -186,11 +186,11 @@ def test_get_event_bills_returns_bills_for_known_event(indexed_db):
 
 def test_get_event_bills_unknown_event_returns_empty(indexed_db):
     from legistar_mcp.tools.events import get_event_bills
-    assert get_event_bills(indexed_db, event_id=99999999) == []
+    assert get_event_bills(indexed_db, event_id=99999999)["results"] == []
 
 
 def test_get_event_bills_sorted_by_sequence_asc(indexed_db):
     from legistar_mcp.tools.events import get_event_bills
-    results = get_event_bills(indexed_db, event_id=21015)
+    results = get_event_bills(indexed_db, event_id=21015)["results"]
     sequences = [r["item_sequence"] for r in results]
     assert sequences == sorted(sequences)

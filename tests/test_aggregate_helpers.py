@@ -37,9 +37,9 @@ def test_validate_group_by_accepts_known_dims():
     validate_group_by(["a", "b"], {"a", "b", "c"})
 
 
-def test_validate_group_by_rejects_empty():
-    with pytest.raises(ValueError, match="at least one"):
-        validate_group_by([], {"a"})
+def test_validate_group_by_accepts_empty():
+    # An empty group_by is a grand total, not an error — must not raise.
+    validate_group_by([], {"a"})
 
 
 def test_validate_group_by_rejects_unknown_dim():

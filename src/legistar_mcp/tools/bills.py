@@ -8,6 +8,8 @@ from ._snippet import _archive_root, _build_snippet, snippet_phrases
 from ._validate import (
     build_fts_query,
     clamp_limit,
+    clamp_offset,
+    envelope,
     load_archive_json,
     resolve_bill_id,
     today_nyc,
@@ -85,8 +87,10 @@ def search_bills(
     committee: str | None = None,
     sponsor_slug: str | None = None,
     limit: int = 20,
-) -> list[dict]:
+    offset: int = 0,
+) -> dict:
     limit = clamp_limit(limit)
+    offset = clamp_offset(offset)
     year_from = validate_year("year_from", year_from)
     year_to = validate_year("year_to", year_to)
     fts_query = build_fts_query(conn, "bills", query, agency)
@@ -106,8 +110,17 @@ def search_bills(
         sql += " " + " ".join(joins)
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY bills.intro_date DESC LIMIT ?"
-    params.append(limit)
+
+    # COUNT over the same FROM/JOIN/WHERE, before LIMIT/OFFSET are appended.
+    count_sql = "SELECT COUNT(DISTINCT bills.id) FROM bills"
+    if joins:
+        count_sql += " " + " ".join(joins)
+    if where:
+        count_sql += " WHERE " + " AND ".join(where)
+    total = conn.execute(count_sql, params).fetchone()[0]
+
+    sql += " ORDER BY bills.intro_date DESC LIMIT ? OFFSET ?"
+    params += [limit, offset]
 
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     for r in rows:
@@ -143,7 +156,7 @@ def search_bills(
                             mentions.append({"field": field_label, "snippet": snip})
             r["mentions"] = mentions
 
-    return rows
+    return envelope(rows, total, offset)
 
 
 def get_bill(
@@ -191,7 +204,8 @@ def aggregate_bills(
     sponsor_slug: str | None = None,
     agency: str | None = None,
     limit: int = 100,
-) -> list[dict]:
+    offset: int = 0,
+) -> dict:
     """Group bills by the requested dimensions and return per-group counts.
 
     Allowed group_by values: status_name, type_name, body_name, sponsor_slug,
@@ -222,6 +236,7 @@ def aggregate_bills(
         where=where,
         params=params,
         limit=limit,
+        offset=offset,
         non_null_cols=_BILL_NON_NULL_COLS,
     )
 
@@ -232,7 +247,8 @@ def recent_bills(
     status: str | None = None,
     type: str | None = None,
     limit: int = 20,
-) -> list[dict]:
+    offset: int = 0,
+) -> dict:
     """Bills introduced within the last `days` days. Convenience wrapper — does
     NOT take an `agency` filter; use search_bills(agency=...) for that.
 
@@ -242,24 +258,27 @@ def recent_bills(
     precise bounded window.
     """
     limit = clamp_limit(limit)
+    offset = clamp_offset(offset)
     days = validate_days(days)
     cutoff = (today_nyc() - _dt.timedelta(days=days)).isoformat()
+    where = ["bills.intro_date >= ?"]
+    params: list = [cutoff]
+    if status:
+        where.append("bills.status_name = ? COLLATE NOCASE")
+        params.append(status)
+    if type:
+        where.append("bills.type_name = ? COLLATE NOCASE")
+        params.append(type)
+    where_clause = " WHERE " + " AND ".join(where)
+    total = conn.execute("SELECT COUNT(*) FROM bills" + where_clause, params).fetchone()[0]
     sql = (
         "SELECT DISTINCT bills.id, bills.guid, bills.file, bills.title, "
         "bills.summary, bills.status_name, bills.type_name, bills.body_name, "
-        "bills.intro_date FROM bills WHERE bills.intro_date >= ?"
+        "bills.intro_date FROM bills" + where_clause
+        + " ORDER BY bills.intro_date DESC LIMIT ? OFFSET ?"
     )
-    params: list = [cutoff]
-    if status:
-        sql += " AND bills.status_name = ? COLLATE NOCASE"
-        params.append(status)
-    if type:
-        sql += " AND bills.type_name = ? COLLATE NOCASE"
-        params.append(type)
-    sql += " ORDER BY bills.intro_date DESC LIMIT ?"
-    params.append(limit)
-    rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    rows = [dict(r) for r in conn.execute(sql, [*params, limit, offset]).fetchall()]
     for r in rows:
         r.pop("guid", None)
         r["legistar_url"] = _legistar_url(r.get("id"))
-    return rows
+    return envelope(rows, total, offset)

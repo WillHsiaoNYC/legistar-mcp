@@ -23,7 +23,7 @@ def test_get_voting_record_returns_votes_for_known_person(indexed_db):
         "SELECT person_slug FROM votes WHERE bill_id = 68628 LIMIT 1"
     ).fetchone()
     slug = row["person_slug"]
-    results = get_voting_record(indexed_db, slug=slug)
+    results = get_voting_record(indexed_db, slug=slug)["results"]
     assert results
     assert all("vote_value" in r for r in results)
 
@@ -34,7 +34,7 @@ def test_get_voting_record_filters_by_year(indexed_db):
     ).fetchone()
     slug = row["person_slug"]
     # MOO fixture votes are from 2022 (per the fixture data).
-    results = get_voting_record(indexed_db, slug=slug, year_from=2022, year_to=2022)
+    results = get_voting_record(indexed_db, slug=slug, year_from=2022, year_to=2022)["results"]
     assert all(r["vote_date"] is None or r["vote_date"].startswith("2022") for r in results)
 
 
@@ -43,7 +43,7 @@ def test_get_voting_record_filters_by_vote_value(indexed_db):
         "SELECT person_slug FROM votes WHERE bill_id = 68628 AND vote_value = 'Affirmative' LIMIT 1"
     ).fetchone()
     slug = row["person_slug"]
-    results = get_voting_record(indexed_db, slug=slug, vote_value="Affirmative")
+    results = get_voting_record(indexed_db, slug=slug, vote_value="Affirmative")["results"]
     assert results
     assert all(r["vote_value"] == "Affirmative" for r in results)
 
@@ -53,7 +53,7 @@ def test_get_voting_record_includes_bill_context(indexed_db):
         "SELECT person_slug FROM votes WHERE bill_id = 68628 LIMIT 1"
     ).fetchone()
     slug = row["person_slug"]
-    results = get_voting_record(indexed_db, slug=slug)
+    results = get_voting_record(indexed_db, slug=slug)["results"]
     moo_hits = [r for r in results if r["bill_id"] == 68628]
     assert moo_hits
     assert moo_hits[0]["file"] == "Int 0153-2022"
@@ -72,7 +72,7 @@ def test_get_voting_record_year_to_includes_dec_31(indexed_db):
          "2024-12-31T23:59:59Z", "Vote", 1),
     )
     indexed_db.commit()
-    results = get_voting_record(indexed_db, slug="synthetic-slug", year_to=2024)
+    results = get_voting_record(indexed_db, slug="synthetic-slug", year_to=2024)["results"]
     assert any(r["vote_date"] == "2024-12-31T23:59:59Z" for r in results)
 
 
@@ -84,7 +84,7 @@ def test_get_voting_record_year_zero_is_rejected(indexed_db):
         "SELECT person_slug FROM votes WHERE bill_id = 68628 LIMIT 1"
     ).fetchone()
     slug = row["person_slug"]
-    assert get_voting_record(indexed_db, slug=slug)  # guard: slug has votes
+    assert get_voting_record(indexed_db, slug=slug)["results"]  # guard: slug has votes
     with pytest.raises(ValueError, match="4-digit year"):
         get_voting_record(indexed_db, slug=slug, year_to=0)
 
@@ -114,12 +114,12 @@ def test_vote_breakdown_returns_all_voters_for_bill(indexed_db):
         "SELECT COUNT(*) FROM votes WHERE bill_id = ?", (68628,)
     ).fetchone()[0]
     assert expected >= 1, "fixture must produce at least 1 vote row for MOO bill"
-    results = vote_breakdown(indexed_db, bill_id=68628)
+    results = vote_breakdown(indexed_db, bill_id=68628)["results"]
     assert len(results) == expected
 
 
 def test_vote_breakdown_respects_limit(indexed_db):
-    results = vote_breakdown(indexed_db, bill_id=68628, limit=5)
+    results = vote_breakdown(indexed_db, bill_id=68628, limit=5)["results"]
     assert len(results) <= 5
 
 
@@ -135,7 +135,7 @@ def test_vote_breakdown_places_null_vote_date_last(indexed_db):
         (888888, "null-date-voter", 68628, None, "Affirmative", None, "Filed", 1),
     )
     indexed_db.commit()
-    results = vote_breakdown(indexed_db, bill_id=68628, limit=200)
+    results = vote_breakdown(indexed_db, bill_id=68628, limit=200)["results"]
     # Find the null-date row's position.
     null_idx = next(
         i for i, r in enumerate(results) if r["person_slug"] == "null-date-voter"
@@ -146,7 +146,7 @@ def test_vote_breakdown_places_null_vote_date_last(indexed_db):
 
 
 def test_vote_breakdown_includes_vote_value(indexed_db):
-    results = vote_breakdown(indexed_db, bill_id=68628)
+    results = vote_breakdown(indexed_db, bill_id=68628)["results"]
     assert results
     assert all("vote_value" in r for r in results)
     # The fixture has affirmatives at minimum

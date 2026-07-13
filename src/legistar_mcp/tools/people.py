@@ -1,7 +1,7 @@
 from pathlib import Path
 from sqlite3 import Connection
 
-from ._validate import clamp_limit, load_archive_json
+from ._validate import clamp_limit, clamp_offset, envelope, load_archive_json
 
 
 def search_people(
@@ -9,8 +9,10 @@ def search_people(
     name: str | None = None,
     active_only: bool = False,
     limit: int = 20,
-) -> list[dict]:
+    offset: int = 0,
+) -> dict:
     limit = clamp_limit(limit)
+    offset = clamp_offset(offset)
     where: list[str] = []
     params: list = []
     if name:
@@ -19,12 +21,14 @@ def search_people(
             params.append(f"%{token}%")
     if active_only:
         where.append("is_active = 1")
-    sql = "SELECT slug, full_name, is_active, start_date, end_date FROM people"
-    if where:
-        sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY full_name LIMIT ?"
-    params.append(limit)
-    return [dict(r) for r in conn.execute(sql, params).fetchall()]
+    where_clause = (" WHERE " + " AND ".join(where)) if where else ""
+    total = conn.execute("SELECT COUNT(*) FROM people" + where_clause, params).fetchone()[0]
+    sql = (
+        "SELECT slug, full_name, is_active, start_date, end_date FROM people"
+        + where_clause + " ORDER BY full_name LIMIT ? OFFSET ?"
+    )
+    rows = [dict(r) for r in conn.execute(sql, [*params, limit, offset]).fetchall()]
+    return envelope(rows, total, offset)
 
 
 def get_person(conn: Connection, archive_root: Path, slug: str) -> dict:

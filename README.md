@@ -209,6 +209,10 @@ The archive shape (what the indexer walks):
 
 Clone size: ~2 GB with full history, or ~700 MB with `--depth 1`.
 
+The indexer was last verified against upstream commit `f02cf40` (2026-07-13);
+a weekly CI job re-runs the full-archive integration test against upstream
+HEAD to catch layout or field-name changes early.
+
 **Requirements:**
 
 - **Python 3.11+** with **SQLite ≥ 3.43** (check: `python3 -c "import sqlite3; print(sqlite3.sqlite_version)"`).

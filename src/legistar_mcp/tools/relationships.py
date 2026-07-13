@@ -41,7 +41,7 @@ def get_voting_record(
     require_known_slug(conn, slug)
     year_from = validate_year("year_from", year_from)
     year_to = validate_year("year_to", year_to)
-    _check_table_populated(conn, "votes", "bills")
+    _check_table_populated(conn, "votes", "bills", min_version=3)
 
     sql = (
         "SELECT v.vote_value, v.vote_date, v.event_id, v.bill_id, "
@@ -94,7 +94,7 @@ def vote_breakdown(
     """
     limit = clamp_limit(limit, hi=1000)
     bill_id = resolve_bill_id(conn, file, bill_id)
-    _check_table_populated(conn, "votes", "bills")
+    _check_table_populated(conn, "votes", "bills", min_version=3)
 
     # `v.vote_date IS NULL` is 0 for not-null and 1 for null, so adding it as
     # the FIRST ORDER BY key pushes null-dated rows to the end. Then the

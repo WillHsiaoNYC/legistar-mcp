@@ -18,7 +18,10 @@ SCHEMA_PATH = Path(__file__).parent / "index" / "schema.sql"
 #       MeetingDetail.aspx URLs from API ID/GUID emitted "Invalid parameters!"
 #       links; the source JSON's InSiteURL is authoritative. NULL on existing
 #       rows until --full re-runs the event indexer.
-SCHEMA_VERSION = 4
+#   5 — event_items.item_sequence falsy-zero fix + stale-row purge +
+#       index_state.last_indexed. --full backfills corrected sequences and
+#       clears any phantom rows from pre-purge releases.
+SCHEMA_VERSION = 5
 
 
 def open_db(db_path: Path) -> sqlite3.Connection:

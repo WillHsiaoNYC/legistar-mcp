@@ -199,7 +199,7 @@ def get_bill_hearings(
     """Events where the given bill was on the agenda. Raises StaleIndexError
     if the event_items table is empty post-upgrade (run `--full` to fix)."""
     limit = clamp_limit(limit)
-    _check_table_populated(conn, "event_items", "events")
+    _check_table_populated(conn, "event_items", "events", min_version=2)
 
     bill_id = resolve_bill_id(conn, file, id)
 
@@ -278,7 +278,7 @@ def aggregate_events(
 def get_event_bills(conn: Connection, event_id: int) -> list[dict]:
     """Bills on the agenda for a specific event. Raises StaleIndexError if
     the event_items table is empty post-upgrade."""
-    _check_table_populated(conn, "event_items", "events")
+    _check_table_populated(conn, "event_items", "events", min_version=2)
 
     sql = (
         "SELECT bills.id, bills.file, bills.title, bills.status_name, "

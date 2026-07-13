@@ -119,7 +119,11 @@ def index_event_file(conn: Connection, json_path: Path, archive_root: Path) -> N
             conn.execute("SELECT COALESCE(MAX(fts_rowid), 0) FROM events_fts_map").fetchone()[0] + 1
         )
         for item in e.get("Items") or []:
-            seq = item.get("AgendaSequence") or item.get("MinutesSequence") or 0
+            seq = item.get("AgendaSequence")
+            if seq is None:
+                seq = item.get("MinutesSequence")
+            if seq is None:
+                seq = 0
             conn.execute(
                 "INSERT INTO events_fts_map (fts_rowid, event_id, item_sequence) VALUES (?, ?, ?)",
                 (next_rowid, e["ID"], seq),

@@ -211,8 +211,10 @@ Clone size: ~2 GB with full history, or ~700 MB with `--depth 1`.
 
 **Requirements:**
 
-- **Python 3.11+** and **[`uv`](https://docs.astral.sh/uv/)** — uv handles the
-  install. It's the only Python toolchain you need to know about.
+- **Python 3.11+** with **SQLite ≥ 3.43** (check: `python3 -c "import sqlite3; print(sqlite3.sqlite_version)"`).
+  Interpreters installed by [`uv`](https://docs.astral.sh/uv/) bundle a current
+  SQLite; Linux *system* Pythons on older distros may not. uv handles the
+  install — it's the only Python toolchain you need to know about.
 - **~3 GB free disk** for the archive (~2 GB) + the index (~105 MB).
 - **An MCP-compatible AI client** — Claude Desktop, Claude Code, Cursor,
   Continue.dev, etc.

@@ -1,4 +1,4 @@
-"""MCP stdio server wiring the 17 Legistar tools.
+"""MCP stdio server wiring the Legistar tools.
 
 Reads `LEGISTAR_DB_PATH` from the environment at startup and fails fast if it
 is missing or doesn't exist. The archive root is read from the indexed DB
@@ -72,7 +72,7 @@ def _load_env_db_path() -> Path:
 
 
 def make_server() -> FastMCP:
-    """Construct a FastMCP server with all 16 Legistar tools registered.
+    """Construct a FastMCP server with the Legistar tools registered.
 
     Resolves the DB and archive_root eagerly so misconfiguration surfaces at
     startup, not on the first tool call.

@@ -4,10 +4,9 @@ from pathlib import Path
 from sqlite3 import Connection
 
 from .._db_utils import _check_table_populated
-from ..agency import resolve_to_fts_query
 from ._aggregate import date_upper_bound, fts_join, run_aggregate
-from ._snippet import _archive_root, _build_snippet, _extract_phrases, _get_agencies
-from ._validate import clamp_limit
+from ._snippet import _archive_root, _build_snippet, _extract_phrases
+from ._validate import build_fts_query, clamp_limit
 from .bills import _legistar_url as _legistar_url_bill
 
 # events_fts column order: item_title (0), agenda_note (1), minutes_note (2).
@@ -74,10 +73,9 @@ def search_events(
     limit: int = 20,
 ) -> list[dict]:
     limit = clamp_limit(limit)
-    if agency:
-        query = resolve_to_fts_query(agency, _get_agencies())
+    fts_query = build_fts_query(conn, "events", query, agency)
 
-    joins, where, params = _event_filters(query, date_from, date_to, committee)
+    joins, where, params = _event_filters(fts_query, date_from, date_to, committee)
 
     sql = (
         "SELECT DISTINCT events.id, events.insite_url, events.body_name, events.date, events.location "
@@ -98,7 +96,7 @@ def search_events(
     # A council meeting can have 100+ Items × 3 fields × N alias phrases; without
     # dedupe + cap, one search response could carry 10k+ near-identical snippets.
     if agency and rows:
-        phrases = _extract_phrases(query) if query else []
+        phrases = _extract_phrases(fts_query or "")
         root = _archive_root(conn)
         ids = [r["id"] for r in rows]
         path_rows = {
@@ -237,6 +235,7 @@ _EVENT_NON_NULL_COLS = {"event_year": "events.date", "event_month": "events.date
 def aggregate_events(
     conn: Connection,
     group_by: list[str],
+    query: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     committee: str | None = None,
@@ -254,8 +253,8 @@ def aggregate_events(
     A bare YYYY-MM-DD date_to covers the whole day (events store full ISO
     timestamps), so date_to='2024-12-31' counts every hearing on Dec 31.
     """
-    query = resolve_to_fts_query(agency, _get_agencies()) if agency else None
-    joins, where, params = _event_filters(query, date_from, date_to, committee)
+    fts_query = build_fts_query(conn, "events", query, agency)
+    joins, where, params = _event_filters(fts_query, date_from, date_to, committee)
 
     return run_aggregate(
         conn,

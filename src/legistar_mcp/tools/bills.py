@@ -3,10 +3,9 @@ import json
 from pathlib import Path
 from sqlite3 import Connection
 
-from ..agency import resolve_to_fts_query
 from ._aggregate import fts_join, run_aggregate, year_window
-from ._snippet import _archive_root, _build_snippet, _extract_phrases, _get_agencies
-from ._validate import clamp_limit
+from ._snippet import _archive_root, _build_snippet, _extract_phrases
+from ._validate import build_fts_query, clamp_limit
 
 # Fields searched for snippet context. Matches the FTS column set, with
 # "text" mapped to the source JSON's "Text" key.
@@ -80,10 +79,9 @@ def search_bills(
     limit: int = 20,
 ) -> list[dict]:
     limit = clamp_limit(limit)
-    if agency:
-        query = resolve_to_fts_query(agency, _get_agencies())
+    fts_query = build_fts_query(conn, "bills", query, agency)
 
-    joins, where, params = _bill_filters(query, year_from, year_to, status, type, committee)
+    joins, where, params = _bill_filters(fts_query, year_from, year_to, status, type, committee)
     if sponsor_slug:
         joins.append("JOIN sponsors s ON bills.id = s.bill_id")
         where.append("s.person_slug = ?")
@@ -107,7 +105,7 @@ def search_bills(
         r["legistar_url"] = _legistar_url(r.get("id"))
 
     if agency and rows:
-        phrases = _extract_phrases(query) if query else []
+        phrases = _extract_phrases(fts_query or "")
         root = _archive_root(conn)
         path_rows = {
             r["id"]: r["path"]
@@ -179,6 +177,7 @@ _BILL_NON_NULL_COLS = {
 def aggregate_bills(
     conn: Connection,
     group_by: list[str],
+    query: str | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
     status: str | None = None,
@@ -199,8 +198,8 @@ def aggregate_bills(
     one slug). Passing agency triggers an FTS5 join that may slow large
     aggregations; bound results with `limit`.
     """
-    query = resolve_to_fts_query(agency, _get_agencies()) if agency else None
-    joins, where, params = _bill_filters(query, year_from, year_to, status, type, committee)
+    fts_query = build_fts_query(conn, "bills", query, agency)
+    joins, where, params = _bill_filters(fts_query, year_from, year_to, status, type, committee)
     if "sponsor_slug" in group_by or sponsor_slug:
         joins.append("LEFT JOIN sponsors s ON bills.id = s.bill_id")
     if sponsor_slug:

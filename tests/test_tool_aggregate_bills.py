@@ -89,3 +89,10 @@ def test_aggregate_bills_year_to_includes_dec_31(indexed_db):
     assert 2024 in by_year
     # Total includes our synthetic Dec 31 bill + at least the existing 2024 fixture.
     assert by_year[2024] >= 2
+
+
+def test_aggregate_bills_accepts_free_text_query(indexed_db):
+    from legistar_mcp.tools.bills import aggregate_bills
+    rows = aggregate_bills(indexed_db, group_by=["intro_year"], query="domestic violence")
+    assert rows, "FTS-filtered aggregate should find the 0153-2022 fixture"
+    assert all("intro_year" in r and "count" in r for r in rows)

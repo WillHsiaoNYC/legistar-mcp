@@ -196,6 +196,7 @@ def make_server() -> FastMCP:
     @_db_locked
     def aggregate_bills(
         group_by: list[GroupByDim],
+        query: str | None = None,
         year_from: int | None = None,
         year_to: int | None = None,
         status: str | None = None,
@@ -205,10 +206,11 @@ def make_server() -> FastMCP:
         agency: str | None = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Group bills by one or more dimensions (status_name, type_name, body_name, sponsor_slug, intro_year) and return per-group counts. Supports search_bills filters."""
+        """Group bills by one or more dimensions (status_name, type_name, body_name, sponsor_slug, intro_year) and return per-group counts. Filters: query (free text), agency, year_from/year_to, status, type, committee, sponsor_slug."""
         return _aggregate_bills(
             conn,
             group_by=group_by,
+            query=query,
             year_from=year_from,
             year_to=year_to,
             status=status,
@@ -223,16 +225,18 @@ def make_server() -> FastMCP:
     @_db_locked
     def aggregate_events(
         group_by: list[EventGroupByDim],
+        query: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
         committee: str | None = None,
         agency: str | None = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Group events by one or more dimensions (body_name, event_year, event_month) and return per-group counts. Supports search_events filters (date_from/date_to/committee/agency)."""
+        """Group events by one or more dimensions (body_name, event_year, event_month) and return per-group counts. Filters: query (free text), agency, date_from/date_to, committee."""
         return _aggregate_events(
             conn,
             group_by=group_by,
+            query=query,
             date_from=date_from,
             date_to=date_to,
             committee=committee,

@@ -240,6 +240,14 @@ Clone size: ~2 GB with full history, or ~700 MB with `--depth 1`.
 | `get_event_bills` | Bills on the agenda for a specific event, sorted by agenda sequence. |
 | `get_voting_record` | Every vote a council member (`slug`) has cast — filter by `year_from`/`year_to` and `vote_value` (e.g., 'Affirmative', 'Negative', 'Absent'). |
 | `vote_breakdown` | Every council member's vote on a specific bill (`bill_id`); sorted most-recent first with NULL-date rows last; bound result with `limit` (default 100). |
+| `list_agencies` | The 95 NYC agencies the `agency=` filter understands — slug, display name, aliases. Optional `query` substring filter. |
+| `data_status` | Index freshness & coverage: last-indexed time, row counts, date range, warnings. Call first when recency matters. |
+| `get_bill_text` | Bounded passages from a bill's full statutory text — windows around a `query` phrase, or the head of the text. |
+
+List tools return `{"results": [...], "total": N, "offset": N, "truncated": bool}` —
+page with `offset`. Detail tools (`get_bill`, `get_event`, `get_person`) return
+the record directly; `get_bill` can be very large, so prefer `get_bill_text`
+for reading statutory text.
 
 ## How agency role-context works
 

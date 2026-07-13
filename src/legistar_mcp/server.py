@@ -37,6 +37,7 @@ from .tools.people import search_people as _search_people
 from .tools.relationships import co_sponsors as _co_sponsors
 from .tools.relationships import get_voting_record as _get_voting_record
 from .tools.relationships import vote_breakdown as _vote_breakdown
+from .tools.status import data_status as _data_status
 from .tools.vocab import list_agencies as _list_agencies
 from .tools.vocab import list_vocabulary as _list_vocabulary
 
@@ -525,6 +526,12 @@ def make_server() -> FastMCP:
     ) -> dict:
         """The 95 NYC agencies the `agency=` parameter understands, with slug, display name, and accepted aliases. Call this before agency-filtered searches when unsure of a name; unmatched agency strings fall back to literal phrase search."""
         return _list_agencies(query=query)
+
+    @server.tool(annotations=_RO)
+    @_db_locked
+    def data_status() -> dict:
+        """Index freshness and coverage: when the local index was last built, how many bills/events/people/votes it holds, the date range covered, and any warnings (stale index, schema behind). Call this first when a question depends on recent or upcoming items."""
+        return _data_status(conn)
 
     @server.tool(annotations=_RO)
     @_db_locked

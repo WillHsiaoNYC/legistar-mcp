@@ -16,6 +16,7 @@ from ._validate import (
     validate_days,
     validate_year,
 )
+from .status import staleness_warning
 
 # Fields searched for snippet context. Matches the FTS column set, with
 # "text" mapped to the source JSON's "Text" key.
@@ -281,4 +282,8 @@ def recent_bills(
     for r in rows:
         r.pop("guid", None)
         r["legistar_url"] = _legistar_url(r.get("id"))
-    return envelope(rows, total, offset)
+    out = envelope(rows, total, offset)
+    warning = staleness_warning(conn)
+    if warning:
+        out["warning"] = warning
+    return out

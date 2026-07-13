@@ -19,6 +19,7 @@ from ._validate import (
     validate_iso_date,
 )
 from .bills import _legistar_url as _legistar_url_bill
+from .status import staleness_warning
 
 # events_fts column order: item_title (0), agenda_note (1), minutes_note (2).
 # When building snippets server-side we map JSON keys to display labels.
@@ -203,7 +204,11 @@ def upcoming_events(
     rows = [dict(r) for r in conn.execute(sql, [*params, limit, offset]).fetchall()]
     for r in rows:
         r["legistar_url"] = r.pop("insite_url", None)
-    return envelope(rows, total, offset)
+    out = envelope(rows, total, offset)
+    warning = staleness_warning(conn)
+    if warning:
+        out["warning"] = warning
+    return out
 
 
 def get_bill_hearings(

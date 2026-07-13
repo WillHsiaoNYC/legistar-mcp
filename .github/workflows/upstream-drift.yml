@@ -1,0 +1,26 @@
+name: upstream-drift
+# The indexer depends on jehiah/nyc_legislation's directory layout and JSON
+# field names with no contract. This weekly job clones the live upstream and
+# runs the full-archive integration test so WE find out about shape changes
+# before users do. Failure here means upstream drifted, not that main broke.
+on:
+  schedule:
+    - cron: "23 11 * * 1" # Mondays 11:23 UTC (off the :00 herd)
+  workflow_dispatch:
+
+jobs:
+  real-archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Clone upstream archive (shallow)
+        run: git clone --depth 1 https://github.com/jehiah/nyc_legislation.git /tmp/nyc_legislation
+      - run: uv sync
+      - name: Full-archive integration test
+        env:
+          LEGISTAR_ARCHIVE_PATH: /tmp/nyc_legislation
+        run: uv run pytest -m slow -v

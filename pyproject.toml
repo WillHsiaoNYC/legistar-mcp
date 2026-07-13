@@ -1,14 +1,33 @@
 [project]
 name = "legistar-mcp"
 version = "0.3.0"
-description = "MCP server for the NYC Legistar legislation archive"
+description = "MCP server for searching NYC City Council legislation — bills, hearings, members, and votes — from a locally indexed archive"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
+keywords = ["mcp", "model-context-protocol", "legistar", "nyc", "city-council", "legislation", "civic-tech"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Text Processing :: Indexing",
+]
 dependencies = [
     "mcp>=1.8",
     "click>=8.1",
     "pyyaml>=6.0",
     "tzdata; sys_platform == 'win32'",
 ]
+
+[project.urls]
+Homepage = "https://github.com/WillHsiaoNYC/legistar-mcp"
+Issues = "https://github.com/WillHsiaoNYC/legistar-mcp/issues"
+"Upstream data (jehiah/nyc_legislation)" = "https://github.com/jehiah/nyc_legislation"
 
 [project.scripts]
 legistar-mcp = "legistar_mcp.cli:main"

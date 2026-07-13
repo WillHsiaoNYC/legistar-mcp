@@ -1,5 +1,5 @@
 # Hand-curated dictionary of NYC agencies for the agency resolver.
-# Source: NYC government internal agency table (2026-05-23).
+# Curated from the public NYC agency directory (nyc.gov/agencies), 2026-05-23.
 # Slug convention: lowercase abbreviation when well-known and non-ambiguous,
 # else kebab-case. Aliases must be phrases that plausibly appear in bill
 # text — internal acronyms that aren't cited in legislation (e.g., bare

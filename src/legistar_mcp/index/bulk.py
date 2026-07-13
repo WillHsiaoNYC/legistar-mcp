@@ -1,3 +1,4 @@
+import datetime as _dt
 import json
 import sys
 from contextlib import nullcontext
@@ -220,6 +221,11 @@ def build_all(
     # or empty). Bump user_version only when the data is known consistent.
     if not incremental:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+
+    conn.execute(
+        "INSERT OR REPLACE INTO index_state (key, value) VALUES ('last_indexed', ?)",
+        (_dt.datetime.now(_dt.timezone.utc).isoformat(),),
+    )
 
     conn.commit()
     return stats

@@ -157,3 +157,16 @@ def test_removed_archive_files_are_purged_on_reindex(tmp_path, fixtures_root):
     from legistar_mcp.tools.bills import search_bills
     remaining = search_bills(conn, query='"domestic violence"', limit=10)
     assert not any("0153-2022" in r["file"] for r in remaining)
+
+
+def test_build_all_records_last_indexed(tmp_path, fixtures_root):
+    import datetime
+    from legistar_mcp.db import init_db
+    conn = init_db(tmp_path / "t.db")
+    build_all(conn, archive_root=fixtures_root, incremental=False)
+    row = conn.execute(
+        "SELECT value FROM index_state WHERE key = 'last_indexed'"
+    ).fetchone()
+    assert row is not None
+    stamp = datetime.datetime.fromisoformat(row["value"])
+    assert stamp.tzinfo is not None  # stored as aware UTC

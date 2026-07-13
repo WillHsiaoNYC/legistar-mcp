@@ -7,7 +7,9 @@ to fix the call — never a silent wrong answer.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import sqlite3
+from pathlib import Path
 from sqlite3 import Connection
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -133,3 +135,51 @@ def envelope(results: list, total: int, offset: int = 0) -> dict:
         "offset": offset,
         "truncated": offset + len(results) < total,
     }
+
+
+def resolve_bill_id(conn: Connection, file: str | None, id: int | None) -> int:
+    """One identifier contract for every bill-taking tool: accept `file`
+    (e.g. 'Int 0153-2022') or numeric `id`, and fail with next-step guidance
+    instead of an ambiguous empty result."""
+    if file is None and id is None:
+        raise ValueError("Supply either `file` (e.g. 'Int 0153-2022') or numeric `id`.")
+    if file is not None:
+        row = conn.execute("SELECT id FROM bills WHERE file = ?", (file,)).fetchone()
+        if row is None:
+            raise ValueError(
+                f"No bill with file {file!r}. Files look like 'Int 0153-2022' / "
+                f"'Res 0021-2024'; find bills via search_bills."
+            )
+        return row["id"]
+    return id
+
+
+def require_known_slug(conn: Connection, slug: str) -> None:
+    """Distinguish 'unknown person' from 'person with no rows'. Slugs can
+    legitimately appear only in sponsors/votes (former members not in the
+    people table), so check all three."""
+    known = conn.execute(
+        "SELECT 1 FROM people WHERE slug = ? "
+        "UNION SELECT 1 FROM sponsors WHERE person_slug = ? "
+        "UNION SELECT 1 FROM votes WHERE person_slug = ? LIMIT 1",
+        (slug, slug, slug),
+    ).fetchone()
+    if known is None:
+        raise ValueError(
+            f"Unknown person slug {slug!r}. Find slugs via search_people(name=...)."
+        )
+
+
+def load_archive_json(archive_root: Path, rel_path: str) -> dict:
+    """Archive reads for detail tools. The search tools already degrade
+    gracefully when a source file vanished after indexing; detail tools were
+    500'ing with a bare FileNotFoundError."""
+    try:
+        with open(Path(archive_root) / rel_path, encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, OSError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            f"Indexed source file {rel_path!r} is missing or unreadable under "
+            f"{archive_root} — the archive was likely moved or pruned after "
+            f"indexing. Re-run `legistar-mcp index` to re-sync."
+        ) from exc

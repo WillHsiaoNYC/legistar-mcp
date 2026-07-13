@@ -77,3 +77,38 @@ def test_windows_use_nyc_calendar_day(indexed_db):
     same window starts Feb 9 and misses it."""
     results = recent_bills(indexed_db, days=33, limit=10)
     assert any("0001-2024" in r["file"] for r in results)
+
+
+def test_unknown_identifiers_raise_guided_errors(indexed_db, fixtures_root):
+    from legistar_mcp.tools.bills import get_bill
+    from legistar_mcp.tools.events import get_bill_hearings, get_event
+    from legistar_mcp.tools.people import get_person
+    from legistar_mcp.tools.relationships import co_sponsors, get_voting_record
+
+    with pytest.raises(ValueError, match="search_bills"):
+        get_bill(indexed_db, fixtures_root, file="Int 9999-2099")
+    with pytest.raises(ValueError, match="search_events"):
+        get_event(indexed_db, fixtures_root, id=999999999)
+    with pytest.raises(ValueError, match="search_people"):
+        get_person(indexed_db, fixtures_root, "nobody-here")
+    with pytest.raises(ValueError, match="search_bills"):
+        get_bill_hearings(indexed_db, file="Int 9999-2099")
+    with pytest.raises(ValueError, match="search_people"):
+        get_voting_record(indexed_db, slug="nobody-here")
+    with pytest.raises(ValueError, match="search_people"):
+        co_sponsors(indexed_db, slug="nobody-here")
+
+
+def test_vote_breakdown_accepts_file(indexed_db):
+    from legistar_mcp.tools.relationships import vote_breakdown
+    by_file = vote_breakdown(indexed_db, file="Int 0153-2022")
+    assert isinstance(by_file, list)
+    with pytest.raises(ValueError, match="search_bills"):
+        vote_breakdown(indexed_db, file="Int 9999-2099")
+
+
+def test_missing_archive_file_is_guided_not_traceback(indexed_db, tmp_path, fixtures_root):
+    from legistar_mcp.tools.bills import get_bill
+    # Point the reader at a root where the indexed rel-path doesn't exist.
+    with pytest.raises(ValueError, match="legistar-mcp index"):
+        get_bill(indexed_db, tmp_path, file="Int 0153-2022")

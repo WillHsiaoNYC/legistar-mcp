@@ -20,9 +20,10 @@ def test_get_bill_by_file(indexed_db):
     assert "Sponsors" in bill
 
 
-def test_get_bill_missing_returns_none(indexed_db):
+def test_get_bill_missing_raises_value_error(indexed_db):
     conn, root = indexed_db
-    assert get_bill(conn, archive_root=root, file="Does Not Exist") is None
+    with pytest.raises(ValueError, match="search_bills"):
+        get_bill(conn, archive_root=root, file="Does Not Exist")
 
 
 def test_get_bill_includes_legistar_url(indexed_db):

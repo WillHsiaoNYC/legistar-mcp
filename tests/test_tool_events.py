@@ -107,9 +107,10 @@ def test_get_bill_hearings_returns_event_for_known_bill(indexed_db):
     assert "legistar_url" in hit
 
 
-def test_get_bill_hearings_unknown_file_returns_empty(indexed_db):
+def test_get_bill_hearings_unknown_file_raises_value_error(indexed_db):
     from legistar_mcp.tools.events import get_bill_hearings
-    assert get_bill_hearings(indexed_db, file="Int 9999-9999") == []
+    with pytest.raises(ValueError, match="search_bills"):
+        get_bill_hearings(indexed_db, file="Int 9999-9999")
 
 
 def test_get_bill_hearings_requires_file_or_id(indexed_db):

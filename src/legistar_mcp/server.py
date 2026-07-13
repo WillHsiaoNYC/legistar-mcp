@@ -136,7 +136,7 @@ def make_server() -> FastMCP:
 
     @server.tool()
     @_db_locked
-    def get_bill(file: str | None = None, id: int | None = None) -> dict | None:
+    def get_bill(file: str | None = None, id: int | None = None) -> dict:
         """Fetch a single bill's full record by file number (e.g., 'Int 1234-2024') or numeric ID."""
         return _get_bill(conn, archive_root, file=file, id=id)
 
@@ -152,7 +152,7 @@ def make_server() -> FastMCP:
 
     @server.tool()
     @_db_locked
-    def get_person(slug: str) -> dict | None:
+    def get_person(slug: str) -> dict:
         """Fetch a Council member's profile by slug."""
         return _get_person(conn, archive_root, slug)
 
@@ -179,7 +179,7 @@ def make_server() -> FastMCP:
 
     @server.tool()
     @_db_locked
-    def get_event(id: int) -> dict | None:
+    def get_event(id: int) -> dict:
         """Fetch a single event's full record by numeric ID."""
         return _get_event(conn, archive_root, id)
 
@@ -319,8 +319,14 @@ def make_server() -> FastMCP:
 
     @server.tool()
     @_db_locked
-    def vote_breakdown(bill_id: int, limit: int = 100) -> list[dict]:
+    def vote_breakdown(
+        bill_id: int | None = None,
+        file: str | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
         """Every council member's vote on a specific bill, sorted most-recent first.
+
+        Supply either numeric `bill_id` or bill `file` (e.g. 'Int 0153-2022').
 
         Returns rows with: person_slug, full_name (NULL if no people row indexed),
         vote_value, vote_date, event_id, action (e.g. 'Approved by Committee'),
@@ -328,7 +334,7 @@ def make_server() -> FastMCP:
         (rare) are placed last. Limit defaults to 100; raise it for omnibus
         bills with many vote rows.
         """
-        return _vote_breakdown(conn, bill_id=bill_id, limit=limit)
+        return _vote_breakdown(conn, bill_id=bill_id, file=file, limit=limit)
 
     return server
 

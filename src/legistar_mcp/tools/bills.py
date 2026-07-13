@@ -5,7 +5,15 @@ from sqlite3 import Connection
 
 from ._aggregate import fts_join, run_aggregate, year_window
 from ._snippet import _archive_root, _build_snippet, _extract_phrases
-from ._validate import build_fts_query, clamp_limit, today_nyc, validate_days, validate_year
+from ._validate import (
+    build_fts_query,
+    clamp_limit,
+    load_archive_json,
+    resolve_bill_id,
+    today_nyc,
+    validate_days,
+    validate_year,
+)
 
 # Fields searched for snippet context. Matches the FTS column set, with
 # "text" mapped to the source JSON's "Text" key.
@@ -143,17 +151,12 @@ def get_bill(
     archive_root: Path,
     file: str | None = None,
     id: int | None = None,
-) -> dict | None:
-    if file:
-        row = conn.execute("SELECT path FROM bills WHERE file = ?", (file,)).fetchone()
-    elif id is not None:
-        row = conn.execute("SELECT path FROM bills WHERE id = ?", (id,)).fetchone()
-    else:
-        raise ValueError("Must supply either `file` or `id`")
+) -> dict:
+    bill_id = resolve_bill_id(conn, file, id)
+    row = conn.execute("SELECT path FROM bills WHERE id = ?", (bill_id,)).fetchone()
     if not row:
-        return None
-    with open(Path(archive_root) / row["path"], encoding="utf-8") as f:
-        bill = json.load(f)
+        raise ValueError(f"No bill with id {bill_id}. Find bills via search_bills.")
+    bill = load_archive_json(archive_root, row["path"])
     bill["LegistarURL"] = _legistar_url(bill.get("ID"))
     return bill
 

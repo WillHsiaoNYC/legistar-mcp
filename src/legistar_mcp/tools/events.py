@@ -6,7 +6,15 @@ from sqlite3 import Connection
 from .._db_utils import _check_table_populated
 from ._aggregate import date_upper_bound, fts_join, run_aggregate
 from ._snippet import _archive_root, _build_snippet, _extract_phrases
-from ._validate import build_fts_query, clamp_limit, today_nyc, validate_days, validate_iso_date
+from ._validate import (
+    build_fts_query,
+    clamp_limit,
+    load_archive_json,
+    resolve_bill_id,
+    today_nyc,
+    validate_days,
+    validate_iso_date,
+)
 from .bills import _legistar_url as _legistar_url_bill
 
 # events_fts column order: item_title (0), agenda_note (1), minutes_note (2).
@@ -139,12 +147,13 @@ def search_events(
     return rows
 
 
-def get_event(conn: Connection, archive_root: Path, id: int) -> dict | None:
+def get_event(conn: Connection, archive_root: Path, id: int) -> dict:
     row = conn.execute("SELECT path FROM events WHERE id = ?", (id,)).fetchone()
     if not row:
-        return None
-    with open(Path(archive_root) / row["path"], encoding="utf-8") as f:
-        event = json.load(f)
+        raise ValueError(
+            f"No event with id {id}. Find events via search_events or upcoming_events."
+        )
+    event = load_archive_json(archive_root, row["path"])
     event["LegistarURL"] = event.get("InSiteURL")
     return event
 
@@ -192,15 +201,7 @@ def get_bill_hearings(
     limit = clamp_limit(limit)
     _check_table_populated(conn, "event_items", "events")
 
-    if file:
-        row = conn.execute("SELECT id FROM bills WHERE file = ?", (file,)).fetchone()
-        bill_id = row["id"] if row else None
-    elif id is not None:
-        bill_id = id
-    else:
-        raise ValueError("Must supply either `file` or `id`")
-    if bill_id is None:
-        return []
+    bill_id = resolve_bill_id(conn, file, id)
 
     sql = (
         "SELECT events.id, events.insite_url, events.body_name, events.date, "

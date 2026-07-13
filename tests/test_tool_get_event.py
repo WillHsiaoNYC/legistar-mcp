@@ -20,9 +20,10 @@ def test_get_event_returns_raw_json(indexed_db):
     assert "Items" in event
 
 
-def test_get_event_missing_returns_none(indexed_db):
+def test_get_event_missing_raises_value_error(indexed_db):
     conn, root = indexed_db
-    assert get_event(conn, archive_root=root, id=999999999) is None
+    with pytest.raises(ValueError, match="search_events"):
+        get_event(conn, archive_root=root, id=999999999)
 
 
 def test_get_event_includes_legistar_url(indexed_db):

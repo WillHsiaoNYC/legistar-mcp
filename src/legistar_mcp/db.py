@@ -23,6 +23,13 @@ SCHEMA_PATH = Path(__file__).parent / "index" / "schema.sql"
 #       clears any phantom rows from pre-purge releases.
 SCHEMA_VERSION = 5
 
+# Releases that introduced each query-critical table (see history above).
+# tools/* pass these to _check_table_populated so the stale gate is
+# per-feature: a DB fully indexed at or after the introducing release is
+# complete for that table regardless of later unrelated version bumps.
+EVENT_ITEMS_MIN_VERSION = 2
+VOTES_MIN_VERSION = 3
+
 
 def open_db(db_path: Path) -> sqlite3.Connection:
     # schema.sql's FTS5 tables use contentless_delete=1, added in SQLite 3.43

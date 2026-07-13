@@ -49,9 +49,6 @@ def test_stale_gate_is_per_feature_not_global(tmp_path, fixtures_root):
     """A DB fully indexed at v3 (votes + event_items populated) must NOT raise
     StaleIndexError for those tables when the code's global version moves to
     5 for unrelated reasons."""
-    from legistar_mcp._db_utils import _check_table_populated
-    from legistar_mcp.db import init_db
-    from legistar_mcp.index.bulk import build_all
 
     conn = init_db(tmp_path / "t.db")
     build_all(conn, archive_root=fixtures_root, incremental=False)

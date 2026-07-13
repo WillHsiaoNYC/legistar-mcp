@@ -4,6 +4,7 @@ from pathlib import Path
 from sqlite3 import Connection
 
 from .._db_utils import _check_table_populated
+from ..db import EVENT_ITEMS_MIN_VERSION
 from ._aggregate import date_upper_bound, fts_join, run_aggregate
 from ._snippet import _archive_root, _build_snippet, snippet_phrases
 from ._validate import (
@@ -199,7 +200,7 @@ def get_bill_hearings(
     """Events where the given bill was on the agenda. Raises StaleIndexError
     if the event_items table is empty post-upgrade (run `--full` to fix)."""
     limit = clamp_limit(limit)
-    _check_table_populated(conn, "event_items", "events", min_version=2)
+    _check_table_populated(conn, "event_items", "events", min_version=EVENT_ITEMS_MIN_VERSION)
 
     bill_id = resolve_bill_id(conn, file, id)
 
@@ -278,7 +279,7 @@ def aggregate_events(
 def get_event_bills(conn: Connection, event_id: int) -> list[dict]:
     """Bills on the agenda for a specific event. Raises StaleIndexError if
     the event_items table is empty post-upgrade."""
-    _check_table_populated(conn, "event_items", "events", min_version=2)
+    _check_table_populated(conn, "event_items", "events", min_version=EVENT_ITEMS_MIN_VERSION)
 
     sql = (
         "SELECT bills.id, bills.file, bills.title, bills.status_name, "

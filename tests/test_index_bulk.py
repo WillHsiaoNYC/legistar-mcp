@@ -103,7 +103,6 @@ def test_incremental_indexes_files_without_lastmodified(tmp_path, fixtures_root)
     the 'seen' map and was skipped forever — never indexed at all."""
     import json
     import shutil
-    from legistar_mcp.db import init_db
 
     archive = tmp_path / "archive"
     shutil.copytree(fixtures_root, archive)
@@ -125,7 +124,6 @@ def test_removed_archive_files_are_purged_on_reindex(tmp_path, fixtures_root):
     """Upstream deletes/renames a JSON → the row previously survived every
     reindex (even --full), leaving phantom bills searchable forever."""
     import shutil
-    from legistar_mcp.db import init_db
 
     archive = tmp_path / "archive"
     shutil.copytree(fixtures_root, archive)
@@ -161,7 +159,6 @@ def test_removed_archive_files_are_purged_on_reindex(tmp_path, fixtures_root):
 
 def test_build_all_records_last_indexed(tmp_path, fixtures_root):
     import datetime
-    from legistar_mcp.db import init_db
     conn = init_db(tmp_path / "t.db")
     build_all(conn, archive_root=fixtures_root, incremental=False)
     row = conn.execute(

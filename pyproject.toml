@@ -29,6 +29,10 @@ target-version = "py311"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The hatchling editable install breaks under CPython 3.14 (+uv 0.11), leaving
+# `import legistar_mcp` unresolvable in the venv; pythonpath makes the test
+# suite independent of the editable hook. Built wheels are unaffected.
+pythonpath = ["src"]
 addopts = "-m 'not slow'"
 markers = [
     "slow: tests that run against the real NYC Legistar archive (use -m slow)",

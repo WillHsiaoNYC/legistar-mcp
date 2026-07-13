@@ -50,6 +50,15 @@ def build_all(
     incremental: bool = False,
     show_progress: bool = False,
 ) -> dict[str, int]:
+    # A brand-new DB (no bills rows) has user_version=0, which the stale-schema
+    # guard below would refuse even though there is nothing stale — the CLI
+    # default (--incremental) would then fail on first run. Incremental is
+    # meaningless with no prior rows anyway, so promote to a full build; that
+    # also stamps user_version at the end.
+    has_rows = conn.execute("SELECT 1 FROM bills LIMIT 1").fetchone() is not None
+    if incremental and not has_rows:
+        incremental = False
+
     # Refuse to run incremental when the DB was indexed under an older schema
     # version. Incremental only re-walks files whose LastModified changed, so
     # tables/columns introduced by a newer release would stay empty/NULL for
@@ -66,6 +75,22 @@ def build_all(
             f"Re-run with --full to fix."
         )
 
+    # Materialize the path generators so the progress bars know totals upfront.
+    bills = list(_bill_paths(archive_root))
+    events = list(_event_paths(archive_root))
+    people = list(_person_paths(archive_root))
+
+    # A wrong --archive path (e.g. the parent directory of the real clone)
+    # walks zero files and would otherwise "succeed" with bills=0, persist the
+    # junk path, and leave every tool returning [] with no diagnostic.
+    if not bills and not events and not people:
+        raise RuntimeError(
+            f"No archive content found under {archive_root}. Expected "
+            f"subdirectories like introduction/, resolution/, land_use/, "
+            f"events/, people/ (see jehiah/nyc_legislation). Check the "
+            f"--archive path."
+        )
+
     # Persist archive_root so query-time tools can resolve relative bills.path
     # back to the source JSON (needed for building snippets server-side, since
     # bills_fts is contentless and SQLite's snippet() returns NULL on it).
@@ -73,11 +98,6 @@ def build_all(
         "INSERT OR REPLACE INTO index_state (key, value) VALUES ('archive_root', ?)",
         (str(archive_root.resolve()),),
     )
-
-    # Materialize the path generators so the progress bars know totals upfront.
-    bills = list(_bill_paths(archive_root))
-    events = list(_event_paths(archive_root))
-    people = list(_person_paths(archive_root))
 
     seen_bills: dict[str, str | None] = {}
     seen_events: dict[str, str | None] = {}

@@ -84,3 +84,15 @@ def test_open_db_silent_when_data_is_current(tmp_path, capsys):
     open_db(db_path).close()
     captured = capsys.readouterr()
     assert "schema version" not in captured.err
+
+
+def test_open_db_requires_sqlite_343(tmp_path, monkeypatch):
+    """schema.sql uses FTS5 contentless_delete=1, introduced in SQLite 3.43.
+    Older libraries pass a 3.30 gate and then crash on CREATE VIRTUAL TABLE
+    with a cryptic error — the gate must catch them with a clear message."""
+    import legistar_mcp.db as db_mod
+    import pytest
+    monkeypatch.setattr(db_mod.sqlite3, "sqlite_version_info", (3, 37, 0))
+    monkeypatch.setattr(db_mod.sqlite3, "sqlite_version", "3.37.0")
+    with pytest.raises(RuntimeError, match="3.43"):
+        db_mod.open_db(tmp_path / "x.db")

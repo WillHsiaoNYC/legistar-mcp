@@ -1,4 +1,4 @@
-"""MCP stdio server wiring the 17 Legistar tools.
+"""MCP stdio server wiring the Legistar tools.
 
 Reads `LEGISTAR_DB_PATH` from the environment at startup and fails fast if it
 is missing or doesn't exist. The archive root is read from the indexed DB
@@ -17,26 +17,7 @@ from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 
-# MCP-exposed enum constraints — keep in sync with tools/vocab.py
-# `_ALLOWED_FIELDS` and tools/bills.py `aggregate_bills` group_by validation.
-# Surfacing these as Literal lets FastMCP's JSON-schema generator publish the
-# enum to the agent, so invalid values fail fast at the protocol layer
-# instead of bubbling up as runtime ValueError from the tool body.
-VocabField = Literal["status_name", "type_name", "body_name", "event_committee"]
-GroupByDim = Literal[
-    "status_name", "type_name", "body_name", "sponsor_slug", "intro_year"
-]
-EventGroupByDim = Literal["body_name", "event_year", "event_month"]
-
 from .db import open_db
-
-# Module-level lock around the shared sqlite Connection. sqlite3 forbids
-# concurrent use of one Connection across threads even with
-# check_same_thread=False; FastMCP may dispatch tools from a worker thread.
-# Wrapping each tool body in `with _db_lock` serializes access without forcing
-# every caller to reopen the DB. Uncontended in the current single-thread
-# stdio transport, so the overhead is a no-op atomic.
-_db_lock = threading.Lock()
 from .tools._snippet import _archive_root
 from .tools.bills import aggregate_bills as _aggregate_bills
 from .tools.bills import get_bill as _get_bill
@@ -56,6 +37,25 @@ from .tools.relationships import get_voting_record as _get_voting_record
 from .tools.relationships import vote_breakdown as _vote_breakdown
 from .tools.vocab import list_vocabulary as _list_vocabulary
 
+# MCP-exposed enum constraints — keep in sync with tools/vocab.py
+# `_ALLOWED_FIELDS` and tools/bills.py `aggregate_bills` group_by validation.
+# Surfacing these as Literal lets FastMCP's JSON-schema generator publish the
+# enum to the agent, so invalid values fail fast at the protocol layer
+# instead of bubbling up as runtime ValueError from the tool body.
+VocabField = Literal["status_name", "type_name", "body_name", "event_committee"]
+GroupByDim = Literal[
+    "status_name", "type_name", "body_name", "sponsor_slug", "intro_year"
+]
+EventGroupByDim = Literal["body_name", "event_year", "event_month"]
+
+# Module-level lock around the shared sqlite Connection. sqlite3 forbids
+# concurrent use of one Connection across threads even with
+# check_same_thread=False; FastMCP may dispatch tools from a worker thread.
+# Wrapping each tool body in `with _db_lock` serializes access without forcing
+# every caller to reopen the DB. Uncontended in the current single-thread
+# stdio transport, so the overhead is a no-op atomic.
+_db_lock = threading.Lock()
+
 
 def _load_env_db_path() -> Path:
     """Return db_path from LEGISTAR_DB_PATH, failing fast if invalid."""
@@ -72,7 +72,7 @@ def _load_env_db_path() -> Path:
 
 
 def make_server() -> FastMCP:
-    """Construct a FastMCP server with all 16 Legistar tools registered.
+    """Construct a FastMCP server with the Legistar tools registered.
 
     Resolves the DB and archive_root eagerly so misconfiguration surfaces at
     startup, not on the first tool call.

@@ -50,6 +50,10 @@ def test_build_all_refuses_incremental_when_user_version_stale(tmp_path, fixture
     LastModified-changed files would get the new schema's mirror writes — the
     rest of the archive would silently stay empty. build_all must refuse."""
     conn = init_db(tmp_path / "t.db")
+    # Seed real data first so the DB is populated-but-stale: a fresh/empty DB
+    # now auto-promotes to a full build (Task 1), so only a populated DB
+    # actually exercises the stale-schema guard.
+    build_all(conn, archive_root=fixtures_root)
     # Force user_version to an older value, simulating an upgrade.
     conn.execute("PRAGMA user_version = 0")
     conn.commit()
@@ -67,3 +71,28 @@ def test_build_all_allows_full_when_user_version_stale(tmp_path, fixtures_root):
     stats = build_all(conn, archive_root=fixtures_root, incremental=False)
     assert stats["bills"] >= 1
     assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+
+
+def test_incremental_on_fresh_db_succeeds_and_stamps_version(tmp_path, fixtures_root):
+    """README quickstart uses the CLI default (--incremental) on a brand-new DB.
+    A fresh DB must auto-promote to a full build instead of raising."""
+    conn = init_db(tmp_path / "fresh.db")
+    stats = build_all(conn, archive_root=fixtures_root, incremental=True)
+    assert stats["bills"] > 0
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+
+
+def test_empty_archive_dir_errors_instead_of_silent_success(tmp_path):
+    """Pointing --archive at an existing-but-wrong directory previously
+    'succeeded' with bills=0 and persisted the junk path. It must error."""
+    conn = init_db(tmp_path / "t.db")
+    wrong_dir = tmp_path / "not_an_archive"
+    wrong_dir.mkdir()
+    with pytest.raises(RuntimeError, match="No archive content"):
+        build_all(conn, archive_root=wrong_dir, incremental=False)
+    # Nothing persisted: no recorded archive_root, version not bumped.
+    row = conn.execute(
+        "SELECT value FROM index_state WHERE key = 'archive_root'"
+    ).fetchone()
+    assert row is None
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 0

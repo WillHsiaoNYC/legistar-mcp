@@ -14,22 +14,22 @@ def indexed_db(tmp_path, fixtures_root):
 
 
 def test_search_by_keyword(indexed_db):
-    results = search_bills(indexed_db, query="domestic violence", limit=5)
+    results = search_bills(indexed_db, query="domestic violence", limit=5)["results"]
     assert any("0153-2022" in r["file"] for r in results)
 
 
 def test_search_filters_by_year(indexed_db):
-    results = search_bills(indexed_db, query=None, year_from=2024, limit=5)
+    results = search_bills(indexed_db, query=None, year_from=2024, limit=5)["results"]
     assert all(r["intro_date"] >= "2024" for r in results)
 
 
 def test_search_limit_caps_results(indexed_db):
-    results = search_bills(indexed_db, query=None, limit=1)
+    results = search_bills(indexed_db, query=None, limit=1)["results"]
     assert len(results) == 1
 
 
 def test_search_results_include_legistar_url(indexed_db):
-    results = search_bills(indexed_db, query="domestic violence", limit=5)
+    results = search_bills(indexed_db, query="domestic violence", limit=5)["results"]
     hit = next(r for r in results if "0153-2022" in r["file"])
     # Use the public-archive gateway form. The API's ID/GUID don't map to the
     # web InSite URL's parameters, so the prior LegislationDetail.aspx?ID=..&GUID=..
@@ -49,7 +49,7 @@ def test_agency_query_returns_snippets_with_role_context(indexed_db):
         agency="Mayor's Office of Operations",
         year_from=2022,
         limit=5,
-    )
+    )["results"]
     assert any("0153-2022" in r["file"] for r in results)
     hit = next(r for r in results if "0153-2022" in r["file"])
     assert "mentions" in hit
@@ -65,32 +65,32 @@ def test_agency_query_returns_snippets_with_role_context(indexed_db):
 
 @freeze_time("2024-04-01")
 def test_recent_bills_within_window(indexed_db):
-    results = recent_bills(indexed_db, days=60, limit=10)
+    results = recent_bills(indexed_db, days=60, limit=10)["results"]
     assert any("0001-2024" in r["file"] for r in results)
 
 
 @freeze_time("2024-04-01")
 def test_recent_bills_empty_window(indexed_db):
-    assert recent_bills(indexed_db, days=1) == []
+    assert recent_bills(indexed_db, days=1)["results"] == []
 
 
 @freeze_time("2024-04-01")
 def test_recent_bills_have_legistar_url(indexed_db):
-    results = recent_bills(indexed_db, days=60)
+    results = recent_bills(indexed_db, days=60)["results"]
     assert results and "legistar_url" in results[0]
 
 
 @freeze_time("2024-04-01")
 def test_recent_bills_status_filter_passes_through(indexed_db):
-    enacted = recent_bills(indexed_db, days=60, status="Enacted")
+    enacted = recent_bills(indexed_db, days=60, status="Enacted")["results"]
     for r in enacted:
         assert r["status_name"] == "Enacted"
-    bogus = recent_bills(indexed_db, days=60, status="Nonexistent Status")
+    bogus = recent_bills(indexed_db, days=60, status="Nonexistent Status")["results"]
     assert bogus == []
 
 
 @freeze_time("2024-04-01")
 def test_recent_bills_type_filter_passes_through(indexed_db):
-    intros = recent_bills(indexed_db, days=60, type="Introduction")
+    intros = recent_bills(indexed_db, days=60, type="Introduction")["results"]
     for r in intros:
         assert r["type_name"] == "Introduction"

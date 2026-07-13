@@ -3,16 +3,26 @@ from sqlite3 import Connection
 from .._db_utils import _check_table_populated
 from ..db import VOTES_MIN_VERSION
 from ._aggregate import year_window
-from ._validate import clamp_limit, require_known_slug, resolve_bill_id, validate_year
+from ._validate import (
+    clamp_limit,
+    clamp_offset,
+    envelope,
+    require_known_slug,
+    resolve_bill_id,
+    validate_year,
+)
 
 
 def co_sponsors(
-    conn: Connection, slug: str, min_overlap: int = 5, limit: int = 20
-) -> list[dict]:
+    conn: Connection, slug: str, min_overlap: int = 5, limit: int = 20, offset: int = 0
+) -> dict:
     """Return council members who have co-sponsored the most bills with `slug`."""
     limit = clamp_limit(limit)
+    offset = clamp_offset(offset)
     require_known_slug(conn, slug)
-    sql = """
+    # HAVING filters on the aggregate, so the total (number of qualifying
+    # co-sponsors) needs the grouped query wrapped in a COUNT(*) subquery.
+    core = """
         SELECT s2.person_slug AS slug,
                COALESCE(p.full_name, s2.person_slug) AS full_name,
                COUNT(DISTINCT s2.bill_id) AS overlap_count
@@ -22,10 +32,12 @@ def co_sponsors(
         WHERE s1.person_slug = ?
         GROUP BY s2.person_slug
         HAVING overlap_count >= ?
-        ORDER BY overlap_count DESC, slug ASC   -- slug tiebreaker = deterministic
-        LIMIT ?
     """
-    return [dict(r) for r in conn.execute(sql, (slug, min_overlap, limit)).fetchall()]
+    total = conn.execute(f"SELECT COUNT(*) FROM ({core})", (slug, min_overlap)).fetchone()[0]
+    # slug tiebreaker = deterministic ordering across ties.
+    sql = core + " ORDER BY overlap_count DESC, slug ASC LIMIT ? OFFSET ?"
+    rows = [dict(r) for r in conn.execute(sql, (slug, min_overlap, limit, offset)).fetchall()]
+    return envelope(rows, total, offset)
 
 
 def get_voting_record(
@@ -35,33 +47,41 @@ def get_voting_record(
     year_to: int | None = None,
     vote_value: str | None = None,
     limit: int = 100,
-) -> list[dict]:
+    offset: int = 0,
+) -> dict:
     """Every vote cast by `slug`, optionally filtered by year and outcome.
     Raises StaleIndexError if the votes table is empty post-upgrade."""
     limit = clamp_limit(limit, hi=1000)
+    offset = clamp_offset(offset)
     require_known_slug(conn, slug)
     year_from = validate_year("year_from", year_from)
     year_to = validate_year("year_to", year_to)
     _check_table_populated(conn, "votes", "bills", min_version=VOTES_MIN_VERSION)
 
+    where = ["v.person_slug = ?"]
+    params: list = [slug]
+    yclauses, yparams = year_window("v.vote_date", year_from, year_to)
+    where += yclauses
+    params += yparams
+    if vote_value:
+        where.append("v.vote_value = ?")
+        params.append(vote_value)
+    where_clause = " WHERE " + " AND ".join(where)
+
+    # The bills LEFT JOIN is a 1:1 lookup for context columns and can't change
+    # the row count, so the total counts votes alone (join-free).
+    total = conn.execute("SELECT COUNT(*) FROM votes v" + where_clause, params).fetchone()[0]
+
     sql = (
         "SELECT v.vote_value, v.vote_date, v.event_id, v.bill_id, "
         "       v.action, v.passed_flag, "
         "       b.file, b.title, b.status_name "
-        "FROM votes v LEFT JOIN bills b ON v.bill_id = b.id "
-        "WHERE v.person_slug = ?"
+        "FROM votes v LEFT JOIN bills b ON v.bill_id = b.id"
+        + where_clause
+        + " ORDER BY v.vote_date DESC LIMIT ? OFFSET ?"
     )
-    params: list = [slug]
-    yclauses, yparams = year_window("v.vote_date", year_from, year_to)
-    for clause in yclauses:
-        sql += f" AND {clause}"
-    params += yparams
-    if vote_value:
-        sql += " AND v.vote_value = ?"
-        params.append(vote_value)
-    sql += " ORDER BY v.vote_date DESC LIMIT ?"
-    params.append(limit)
-    return [dict(r) for r in conn.execute(sql, params).fetchall()]
+    rows = [dict(r) for r in conn.execute(sql, [*params, limit, offset]).fetchall()]
+    return envelope(rows, total, offset)
 
 
 def vote_breakdown(
@@ -69,13 +89,14 @@ def vote_breakdown(
     bill_id: int | None = None,
     file: str | None = None,
     limit: int = 100,
-) -> list[dict]:
+    offset: int = 0,
+) -> dict:
     """Every council member's vote on a specific bill, across all history records.
 
     Identify the bill by numeric `bill_id` OR by `file` (e.g. 'Int 0153-2022');
     an unknown `file` raises a guided ValueError instead of an empty result.
 
-    Returns rows with seven columns:
+    Each row in the envelope's `results` has seven columns:
       - person_slug
       - full_name (NULL if no people row indexed)
       - vote_value (e.g. 'Affirmative', 'Negative', 'Abstain')
@@ -94,8 +115,13 @@ def vote_breakdown(
     `--full` to backfill).
     """
     limit = clamp_limit(limit, hi=1000)
+    offset = clamp_offset(offset)
     bill_id = resolve_bill_id(conn, file, bill_id)
     _check_table_populated(conn, "votes", "bills", min_version=VOTES_MIN_VERSION)
+
+    total = conn.execute(
+        "SELECT COUNT(*) FROM votes WHERE bill_id = ?", (bill_id,)
+    ).fetchone()[0]
 
     # `v.vote_date IS NULL` is 0 for not-null and 1 for null, so adding it as
     # the FIRST ORDER BY key pushes null-dated rows to the end. Then the
@@ -106,6 +132,7 @@ def vote_breakdown(
         "FROM votes v LEFT JOIN people p ON v.person_slug = p.slug "
         "WHERE v.bill_id = ? "
         "ORDER BY v.vote_date IS NULL, v.vote_date DESC, p.full_name ASC NULLS LAST "
-        "LIMIT ?"
+        "LIMIT ? OFFSET ?"
     )
-    return [dict(r) for r in conn.execute(sql, (bill_id, limit)).fetchall()]
+    rows = [dict(r) for r in conn.execute(sql, (bill_id, limit, offset)).fetchall()]
+    return envelope(rows, total, offset)

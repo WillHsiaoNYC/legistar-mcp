@@ -13,7 +13,7 @@ def indexed_db(tmp_path, fixtures_root):
 
 
 def test_co_sponsors_returns_overlap_above_min(indexed_db):
-    results = co_sponsors(indexed_db, slug="adrienne-e-adams", min_overlap=2, limit=20)
+    results = co_sponsors(indexed_db, slug="adrienne-e-adams", min_overlap=2, limit=20)["results"]
     # The MOO + new sponsor-overlap fixture share >=N co-sponsors with Adams.
     # Document expected N in Task A6 commit message and assert it here.
     assert any(r["overlap_count"] >= 2 for r in results)
@@ -21,11 +21,11 @@ def test_co_sponsors_returns_overlap_above_min(indexed_db):
 
 
 def test_co_sponsors_ordering_is_deterministic(indexed_db):
-    r1 = co_sponsors(indexed_db, slug="adrienne-e-adams", min_overlap=1, limit=50)
-    r2 = co_sponsors(indexed_db, slug="adrienne-e-adams", min_overlap=1, limit=50)
+    r1 = co_sponsors(indexed_db, slug="adrienne-e-adams", min_overlap=1, limit=50)["results"]
+    r2 = co_sponsors(indexed_db, slug="adrienne-e-adams", min_overlap=1, limit=50)["results"]
     assert r1 == r2  # ties broken by slug ASC, so order is stable
 
 
 def test_co_sponsors_respects_min_overlap(indexed_db):
-    high = co_sponsors(indexed_db, slug="adrienne-e-adams", min_overlap=99)
+    high = co_sponsors(indexed_db, slug="adrienne-e-adams", min_overlap=99)["results"]
     assert high == []

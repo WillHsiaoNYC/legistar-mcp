@@ -9,7 +9,7 @@ a date-boundary rule lands in one place instead of diverging between copies.
 import datetime as _dt
 from sqlite3 import Connection
 
-from ._validate import clamp_limit
+from ._validate import clamp_limit, clamp_offset, envelope
 
 
 def fts_join(table: str, id_col: str) -> tuple[list[str], str]:
@@ -31,11 +31,10 @@ def fts_join(table: str, id_col: str) -> tuple[list[str], str]:
 
 
 def validate_group_by(group_by: list[str], allowed: set[str]) -> None:
-    """Raise ValueError if `group_by` is empty or names a dimension not in
-    `allowed`. Shared by every aggregate_* tool so the error surface is one
-    thing, not one-per-tool."""
-    if not group_by:
-        raise ValueError("group_by must contain at least one dimension")
+    """Raise ValueError if `group_by` names a dimension not in `allowed`.
+    An empty `group_by` is allowed and means a single grand-total row. Shared
+    by every aggregate_* tool so the error surface is one thing, not
+    one-per-tool."""
     for g in group_by:
         if g not in allowed:
             raise ValueError(
@@ -112,16 +111,19 @@ def run_aggregate(
     where: list[str],
     params: list,
     limit: int,
+    offset: int = 0,
     non_null_cols: dict[str, str] | None = None,
-) -> list[dict]:
-    """Validate `group_by`, assemble the shared GROUP BY count query, run it.
+) -> dict:
+    """Validate `group_by`, assemble the shared GROUP BY count query, run it,
+    and wrap the rows in a paging envelope (results/total/offset/truncated).
 
     `dim_exprs` maps every allowed dimension to its SQL expression and doubles
-    as the allow-list (`group_by` is validated against its keys). `non_null_cols`
-    maps a dimension to a source column that must be non-NULL for that dimension
-    to mean anything — e.g. a year derived from a nullable date. When such a
-    dimension is grouped on, rows with a NULL source are excluded, so callers
-    never receive a spurious `{dim: None}` bucket.
+    as the allow-list (`group_by` is validated against its keys). An empty
+    `group_by` collapses to a single grand-total row (`[{"count": N}]`, total
+    1). `non_null_cols` maps a dimension to a source column that must be
+    non-NULL for that dimension to mean anything — e.g. a year derived from a
+    nullable date. When such a dimension is grouped on, rows with a NULL source
+    are excluded, so callers never receive a spurious `{dim: None}` bucket.
 
     Joins fan one base row out into many (FTS map: one per matching FTS item;
     sponsors: one per sponsor), so any join forces `COUNT(DISTINCT {table}.id)`.
@@ -130,6 +132,7 @@ def run_aggregate(
     desc with the grouping columns as a stable tie-break.
     """
     limit = clamp_limit(limit, hi=1000)
+    offset = clamp_offset(offset)
     validate_group_by(group_by, set(dim_exprs))
     where = list(where)  # local copy — never mutate the caller's list
     if non_null_cols:
@@ -138,16 +141,33 @@ def run_aggregate(
             if col:
                 where.append(f"{col} IS NOT NULL")
     count_expr = f"COUNT(DISTINCT {table}.id)" if joins else "COUNT(*)"
+    from_clause = f"FROM {table}"
+    if joins:
+        from_clause += " " + " ".join(joins)
+    where_clause = (" WHERE " + " AND ".join(where)) if where else ""
+
+    if not group_by:
+        # Grand total: one row, one bucket — no GROUP BY, no paging.
+        sql = f"SELECT {count_expr} AS count {from_clause}{where_clause}"
+        rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+        return envelope(rows, 1, offset)
+
+    # total = number of groups: count the DISTINCT grouping tuples. The inner
+    # GROUP BY must use the raw dimension expressions (the outer aliases don't
+    # exist inside a bare `SELECT 1`).
+    group_exprs = ", ".join(dim_exprs[g] for g in group_by)
+    count_sql = (
+        f"SELECT COUNT(*) FROM (SELECT 1 {from_clause}{where_clause} "
+        f"GROUP BY {group_exprs})"
+    )
+    total = conn.execute(count_sql, params).fetchone()[0]
+
     select_cols = [f"{dim_exprs[g]} AS {g}" for g in group_by]
     sql = (
-        f"SELECT {', '.join(select_cols)}, {count_expr} AS count "
-        f"FROM {table}"
+        f"SELECT {', '.join(select_cols)}, {count_expr} AS count {from_clause}{where_clause}"
+        f" GROUP BY {', '.join(group_by)}"
+        f" ORDER BY count DESC, {', '.join(group_by)}"
+        f" LIMIT ? OFFSET ?"
     )
-    if joins:
-        sql += " " + " ".join(joins)
-    if where:
-        sql += " WHERE " + " AND ".join(where)
-    sql += f" GROUP BY {', '.join(group_by)}"
-    sql += " ORDER BY count DESC, " + ", ".join(group_by)
-    sql += " LIMIT ?"
-    return [dict(r) for r in conn.execute(sql, [*params, limit]).fetchall()]
+    rows = [dict(r) for r in conn.execute(sql, [*params, limit, offset]).fetchall()]
+    return envelope(rows, total, offset)

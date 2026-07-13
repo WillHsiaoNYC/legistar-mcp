@@ -54,6 +54,22 @@ def test_validate_iso_date_accepts_prefix_forms():
             validate_iso_date("date_from", bad)
 
 
+def test_validate_iso_date_full_timestamps_validated_and_normalized():
+    # Space-separated timestamps (str(datetime.now()) form) are normalized to
+    # 'T' so they lex-compare correctly against stored ISO timestamps.
+    assert (
+        validate_iso_date("date_to", "2024-08-15 23:59:59")
+        == "2024-08-15T23:59:59"
+    )
+    assert (
+        validate_iso_date("date_to", "2024-08-15T23:59:59")
+        == "2024-08-15T23:59:59"
+    )
+    # Garbage after a valid 10-char prefix no longer sneaks through.
+    with pytest.raises(ValueError, match="date_to"):
+        validate_iso_date("date_to", "2024-08-15xxxx")
+
+
 def test_validate_days_rejects_nonpositive():
     assert validate_days(7) == 7
     with pytest.raises(ValueError, match="days"):

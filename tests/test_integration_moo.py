@@ -35,7 +35,7 @@ def test_moo_role_context_from_real_archive(tmp_path):
         agency="Mayor's Office of Operations",
         year_from=2022,
         limit=200,
-    )
+    )["results"]
     assert results, "expected at least one bill mentioning MOO since 2022"
 
     # The known witness must appear in the results.

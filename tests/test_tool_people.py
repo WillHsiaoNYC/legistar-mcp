@@ -14,7 +14,7 @@ def indexed_db(tmp_path, fixtures_root):
 
 def test_search_people_returns_rows(indexed_db):
     conn, _ = indexed_db
-    results = search_people(conn, limit=5)
+    results = search_people(conn, limit=5)["results"]
     assert len(results) >= 1
     assert "slug" in results[0]
 

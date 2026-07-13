@@ -153,7 +153,7 @@ def test_removed_archive_files_are_purged_on_reindex(tmp_path, fixtures_root):
     # purged bill (behavioral check — robust even if other fixtures also match
     # the phrase).
     from legistar_mcp.tools.bills import search_bills
-    remaining = search_bills(conn, query='"domestic violence"', limit=10)
+    remaining = search_bills(conn, query='"domestic violence"', limit=10)["results"]
     assert not any("0153-2022" in r["file"] for r in remaining)
 
 

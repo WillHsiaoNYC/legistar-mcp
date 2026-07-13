@@ -13,7 +13,7 @@ def indexed_db(tmp_path, fixtures_root):
 
 
 def test_list_committees_returns_aggregated_counts(indexed_db):
-    results = list_committees(indexed_db)
+    results = list_committees(indexed_db)["results"]
     assert isinstance(results, list)
     assert len(results) >= 1
     row = results[0]
@@ -25,7 +25,7 @@ def test_list_committees_returns_aggregated_counts(indexed_db):
 
 
 def test_list_committees_orders_by_total_desc(indexed_db):
-    results = list_committees(indexed_db)
+    results = list_committees(indexed_db)["results"]
     totals = [r["bill_count"] + r["event_count"] for r in results]
     assert totals == sorted(totals, reverse=True)
 
@@ -33,14 +33,14 @@ def test_list_committees_orders_by_total_desc(indexed_db):
 def test_list_committees_year_filter_narrows_counts(indexed_db):
     # Without filter the fixture has bills across 2022-2024 and one 2024 event.
     # year_from=2099 must exclude everything from both branches.
-    assert list_committees(indexed_db, year_from=2099) == []
+    assert list_committees(indexed_db, year_from=2099)["results"] == []
 
 
 def test_list_committees_year_filter_includes_window_only(indexed_db):
     # year_from/year_to should narrow both bill_count and event_count to the
     # given window. Fixture's only event is 2024-08-15; restricting to 2024
     # alone must still include it.
-    rows = list_committees(indexed_db, year_from=2024, year_to=2024)
+    rows = list_committees(indexed_db, year_from=2024, year_to=2024)["results"]
     cc = next((r for r in rows if r["name"] == "City Council"), None)
     assert cc is not None
     assert cc["event_count"] >= 1
@@ -59,18 +59,18 @@ def test_list_committees_null_intro_date_counted_unfiltered_dropped_when_windowe
     # a date-less bill belongs to a year. Lock this so the filtered and
     # unfiltered code paths stay deliberately, not accidentally, divergent.
     body = "Committee on Health"
-    before = {r["name"]: r["bill_count"] for r in list_committees(indexed_db)}
+    before = {r["name"]: r["bill_count"] for r in list_committees(indexed_db)["results"]}
     indexed_db.execute(
         "INSERT INTO bills (id, file, body_name, intro_date, path) "
         "VALUES (?, ?, ?, NULL, ?)",
         (960001, "Int 7777-2024", body, "bills/nointro.json"),
     )
     indexed_db.commit()
-    after = {r["name"]: r["bill_count"] for r in list_committees(indexed_db)}
+    after = {r["name"]: r["bill_count"] for r in list_committees(indexed_db)["results"]}
     assert after[body] == before[body] + 1  # unfiltered: null-date bill counts
     windowed = {
         r["name"]: r["bill_count"]
-        for r in list_committees(indexed_db, year_from=1900, year_to=2100)
+        for r in list_committees(indexed_db, year_from=1900, year_to=2100)["results"]
     }
     assert windowed[body] == before[body]  # windowed: null-date bill excluded
 
@@ -80,7 +80,7 @@ def test_list_committees_exposes_first_seen_dates(indexed_db):
     # have in the archive for each committee — a proxy for "when did this
     # committee start showing up?". Both keys must be present on every row,
     # populated as ISO date strings where there's activity and NULL otherwise.
-    results = list_committees(indexed_db)
+    results = list_committees(indexed_db)["results"]
     assert all("first_bill_date" in r and "first_event_date" in r for r in results)
     # Each date, when present, must match its count: a committee with bills
     # has a first_bill_date; one with events has a first_event_date.

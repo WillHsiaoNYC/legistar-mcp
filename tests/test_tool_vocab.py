@@ -30,3 +30,14 @@ def test_list_vocabulary_event_committee_returns_known_values(indexed_db):
     assert isinstance(values, list)
     assert all(isinstance(v, str) for v in values)
     assert "City Council" in values
+
+
+def test_list_agencies_returns_catalog_and_filters():
+    from legistar_mcp.tools.vocab import list_agencies
+    out = list_agencies()
+    assert out["total"] >= 90 and not out["truncated"]
+    nypd = [a for a in out["results"] if a["slug"] == "nypd"]
+    assert nypd and "NYPD" in nypd[0]["aliases"]
+    filtered = list_agencies(query="consumer")
+    assert filtered["total"] < out["total"]
+    assert any(a["slug"] == "dcwp" for a in filtered["results"])

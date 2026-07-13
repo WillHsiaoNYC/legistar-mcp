@@ -1,5 +1,6 @@
 import datetime as _dt
 import json
+import re
 from pathlib import Path
 from sqlite3 import Connection
 
@@ -8,12 +9,15 @@ from ._snippet import _archive_root, _build_snippet, snippet_phrases
 from ._validate import (
     build_fts_query,
     clamp_limit,
+    clamp_offset,
+    envelope,
     load_archive_json,
     resolve_bill_id,
     today_nyc,
     validate_days,
     validate_year,
 )
+from .status import staleness_warning
 
 # Fields searched for snippet context. Matches the FTS column set, with
 # "text" mapped to the source JSON's "Text" key.
@@ -85,8 +89,10 @@ def search_bills(
     committee: str | None = None,
     sponsor_slug: str | None = None,
     limit: int = 20,
-) -> list[dict]:
+    offset: int = 0,
+) -> dict:
     limit = clamp_limit(limit)
+    offset = clamp_offset(offset)
     year_from = validate_year("year_from", year_from)
     year_to = validate_year("year_to", year_to)
     fts_query = build_fts_query(conn, "bills", query, agency)
@@ -97,17 +103,24 @@ def search_bills(
         where.append("s.person_slug = ?")
         params.append(sponsor_slug)
 
+    # One FROM/JOIN/WHERE fragment feeds both the COUNT and the page query so
+    # the two can never drift. Join-free counts skip the DISTINCT dedup
+    # (bills.id is the PK; mirrors run_aggregate).
+    from_jw = "FROM bills"
+    if joins:
+        from_jw += " " + " ".join(joins)
+    if where:
+        from_jw += " WHERE " + " AND ".join(where)
+
+    count_expr = "COUNT(DISTINCT bills.id)" if joins else "COUNT(*)"
+    total = conn.execute(f"SELECT {count_expr} {from_jw}", params).fetchone()[0]
+
     sql = (
         "SELECT DISTINCT bills.id, bills.guid, bills.file, bills.title, bills.summary, "
-        "bills.status_name, bills.type_name, bills.body_name, bills.intro_date "
-        "FROM bills"
+        f"bills.status_name, bills.type_name, bills.body_name, bills.intro_date {from_jw} "
+        "ORDER BY bills.intro_date DESC LIMIT ? OFFSET ?"
     )
-    if joins:
-        sql += " " + " ".join(joins)
-    if where:
-        sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY bills.intro_date DESC LIMIT ?"
-    params.append(limit)
+    params += [limit, offset]
 
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     for r in rows:
@@ -143,7 +156,7 @@ def search_bills(
                             mentions.append({"field": field_label, "snippet": snip})
             r["mentions"] = mentions
 
-    return rows
+    return envelope(rows, total, offset)
 
 
 def get_bill(
@@ -191,7 +204,8 @@ def aggregate_bills(
     sponsor_slug: str | None = None,
     agency: str | None = None,
     limit: int = 100,
-) -> list[dict]:
+    offset: int = 0,
+) -> dict:
     """Group bills by the requested dimensions and return per-group counts.
 
     Allowed group_by values: status_name, type_name, body_name, sponsor_slug,
@@ -222,6 +236,7 @@ def aggregate_bills(
         where=where,
         params=params,
         limit=limit,
+        offset=offset,
         non_null_cols=_BILL_NON_NULL_COLS,
     )
 
@@ -232,7 +247,8 @@ def recent_bills(
     status: str | None = None,
     type: str | None = None,
     limit: int = 20,
-) -> list[dict]:
+    offset: int = 0,
+) -> dict:
     """Bills introduced within the last `days` days. Convenience wrapper — does
     NOT take an `agency` filter; use search_bills(agency=...) for that.
 
@@ -242,24 +258,82 @@ def recent_bills(
     precise bounded window.
     """
     limit = clamp_limit(limit)
+    offset = clamp_offset(offset)
     days = validate_days(days)
     cutoff = (today_nyc() - _dt.timedelta(days=days)).isoformat()
+    where = ["bills.intro_date >= ?"]
+    params: list = [cutoff]
+    if status:
+        where.append("bills.status_name = ? COLLATE NOCASE")
+        params.append(status)
+    if type:
+        where.append("bills.type_name = ? COLLATE NOCASE")
+        params.append(type)
+    where_clause = " WHERE " + " AND ".join(where)
+    total = conn.execute("SELECT COUNT(*) FROM bills" + where_clause, params).fetchone()[0]
     sql = (
         "SELECT DISTINCT bills.id, bills.guid, bills.file, bills.title, "
         "bills.summary, bills.status_name, bills.type_name, bills.body_name, "
-        "bills.intro_date FROM bills WHERE bills.intro_date >= ?"
+        "bills.intro_date FROM bills" + where_clause
+        + " ORDER BY bills.intro_date DESC LIMIT ? OFFSET ?"
     )
-    params: list = [cutoff]
-    if status:
-        sql += " AND bills.status_name = ? COLLATE NOCASE"
-        params.append(status)
-    if type:
-        sql += " AND bills.type_name = ? COLLATE NOCASE"
-        params.append(type)
-    sql += " ORDER BY bills.intro_date DESC LIMIT ?"
-    params.append(limit)
-    rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    rows = [dict(r) for r in conn.execute(sql, [*params, limit, offset]).fetchall()]
     for r in rows:
         r.pop("guid", None)
         r["legistar_url"] = _legistar_url(r.get("id"))
-    return rows
+    out = envelope(rows, total, offset)
+    warning = staleness_warning(conn)
+    if warning:
+        out["warning"] = warning
+    return out
+
+
+def get_bill_text(
+    conn: Connection,
+    archive_root: Path,
+    file: str | None = None,
+    id: int | None = None,
+    query: str | None = None,
+    context_chars: int = 1500,
+    max_matches: int = 5,
+) -> dict:
+    """Targeted extraction from a bill's statutory Text. The middle step
+    between a 120-char search snippet and get_bill's full record (which can
+    run to megabytes for omnibus bills): with `query`, windows around each
+    case-insensitive occurrence; without, the head of the text."""
+    context_chars = max(100, min(context_chars, 5000))
+    max_matches = max(1, min(max_matches, 20))
+    bill_id = resolve_bill_id(conn, file, id)
+    row = conn.execute(
+        "SELECT file, path FROM bills WHERE id = ?", (bill_id,)
+    ).fetchone()
+    data = load_archive_json(archive_root, row["path"])
+    text = data.get("Text") or ""
+
+    segments: list[dict] = []
+    if query and query.strip():
+        for m in re.finditer(re.escape(query.strip()), text, re.IGNORECASE):
+            start = max(0, m.start() - context_chars)
+            end = min(len(text), m.end() + context_chars)
+            segments.append({"offset": start, "text": text[start:end]})
+            if len(segments) >= max_matches:
+                break
+    elif text:
+        segments.append({"offset": 0, "text": text[: context_chars * 2]})
+
+    # Union of segment intervals — summing lengths double-counts overlapping
+    # windows and can report truncated=False while real text is uncovered.
+    covered = 0
+    last_end = 0
+    for s in segments:
+        start, end = s["offset"], s["offset"] + len(s["text"])
+        if end > last_end:
+            covered += end - max(start, last_end)
+            last_end = end
+    return {
+        "file": row["file"],
+        "id": bill_id,
+        "total_chars": len(text),
+        "truncated": covered < len(text),
+        "segments": segments,
+    }

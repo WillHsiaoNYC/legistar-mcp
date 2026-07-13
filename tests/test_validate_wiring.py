@@ -20,12 +20,12 @@ def indexed_db(tmp_path, fixtures_root):
 
 def test_negative_limit_never_returns_everything(indexed_db):
     # Fixture has 3 bills; a passed-through LIMIT -1 would return all 3.
-    assert len(search_bills(indexed_db, limit=-1)) == 1
-    assert len(search_people(indexed_db, limit=-1)) == 1
-    assert len(search_events(indexed_db, limit=-1)) == 1
-    assert len(recent_bills(indexed_db, days=36500, limit=-1)) == 1
-    assert len(upcoming_events(indexed_db, days=36500, limit=-1)) <= 1
-    assert len(vote_breakdown(indexed_db, bill_id=68628, limit=-1)) <= 1
+    assert len(search_bills(indexed_db, limit=-1)["results"]) == 1
+    assert len(search_people(indexed_db, limit=-1)["results"]) == 1
+    assert len(search_events(indexed_db, limit=-1)["results"]) == 1
+    assert len(recent_bills(indexed_db, days=36500, limit=-1)["results"]) == 1
+    assert len(upcoming_events(indexed_db, days=36500, limit=-1)["results"]) <= 1
+    assert len(vote_breakdown(indexed_db, bill_id=68628, limit=-1)["results"]) <= 1
 
 
 def test_punctuated_query_does_not_crash(indexed_db):
@@ -38,11 +38,13 @@ def test_punctuated_query_does_not_crash(indexed_db):
 def test_query_and_agency_combine_instead_of_override(indexed_db):
     # Fixture Int 0153-2022 mentions the Mayor's Office of Operations.
     # agency alone matches it; adding an unrelated query must NARROW, not override.
-    agency_only = search_bills(indexed_db, agency="Mayor's Office of Operations", limit=5)
+    agency_only = search_bills(
+        indexed_db, agency="Mayor's Office of Operations", limit=5
+    )["results"]
     assert any("0153-2022" in r["file"] for r in agency_only)
     combined = search_bills(
         indexed_db, query="zzzunfindable", agency="Mayor's Office of Operations", limit=5
-    )
+    )["results"]
     assert combined == []  # query was previously discarded → would return the agency hits
 
 
@@ -75,7 +77,7 @@ def test_windows_use_nyc_calendar_day(indexed_db):
     recent_bills(days=33) from Mar 12 reaches back to Feb 8 and catches the
     Int 0001-2024 fixture (intro 2024-02-08); from a UTC 'today' of Mar 13 the
     same window starts Feb 9 and misses it."""
-    results = recent_bills(indexed_db, days=33, limit=10)
+    results = recent_bills(indexed_db, days=33, limit=10)["results"]
     assert any("0001-2024" in r["file"] for r in results)
 
 
@@ -101,7 +103,7 @@ def test_unknown_identifiers_raise_guided_errors(indexed_db, fixtures_root):
 
 def test_vote_breakdown_accepts_file(indexed_db):
     from legistar_mcp.tools.relationships import vote_breakdown
-    by_file = vote_breakdown(indexed_db, file="Int 0153-2022")
+    by_file = vote_breakdown(indexed_db, file="Int 0153-2022")["results"]
     assert isinstance(by_file, list)
     with pytest.raises(ValueError, match="search_bills"):
         vote_breakdown(indexed_db, file="Int 9999-2099")
@@ -115,15 +117,15 @@ def test_missing_archive_file_is_guided_not_traceback(indexed_db, tmp_path, fixt
 
 
 def test_filters_match_case_insensitively(indexed_db):
-    exact = search_bills(indexed_db, status="Enacted", limit=10)
-    lower = search_bills(indexed_db, status="enacted", limit=10)
+    exact = search_bills(indexed_db, status="Enacted", limit=10)["results"]
+    lower = search_bills(indexed_db, status="enacted", limit=10)["results"]
     assert [r["file"] for r in lower] == [r["file"] for r in exact]
     assert lower, "fixture set contains an Enacted bill"
 
 
 def test_search_people_matches_across_middle_initial(indexed_db):
     # full_name is 'Adrienne E. Adams' — a single-substring LIKE missed this.
-    hits = search_people(indexed_db, name="Adrienne Adams")
+    hits = search_people(indexed_db, name="Adrienne Adams")["results"]
     assert any(p["slug"] == "adrienne-e-adams" for p in hits)
 
 
@@ -138,10 +140,10 @@ def test_snippet_offsets_survive_unicode_case_folding():
 
 
 def test_plain_query_search_returns_mentions(indexed_db):
-    rows = search_bills(indexed_db, query='"domestic violence"', limit=5)
+    rows = search_bills(indexed_db, query='"domestic violence"', limit=5)["results"]
     hit = next(r for r in rows if "0153-2022" in r["file"])
     assert hit["mentions"], "plain-text query should carry role-context snippets too"
-    rows_bare = search_bills(indexed_db, query="domestic violence", limit=5)
+    rows_bare = search_bills(indexed_db, query="domestic violence", limit=5)["results"]
     hit_bare = next(r for r in rows_bare if "0153-2022" in r["file"])
     assert hit_bare["mentions"]
 
@@ -155,3 +157,28 @@ def test_unknown_numeric_bill_id_raises_not_empty(indexed_db):
         vote_breakdown(indexed_db, bill_id=999999999)
     with pytest.raises(ValueError, match="search_bills"):
         get_bill_hearings(indexed_db, id=999999999)
+
+
+def test_search_bills_envelope_and_offset(indexed_db):
+    page1 = search_bills(indexed_db, limit=2)
+    assert set(page1) == {"results", "total", "offset", "truncated"}
+    assert page1["total"] == 3 and len(page1["results"]) == 2 and page1["truncated"]
+    page2 = search_bills(indexed_db, limit=2, offset=2)
+    assert len(page2["results"]) == 1 and page2["offset"] == 2
+    assert not page2["truncated"]
+    ids = {r["id"] for r in page1["results"]} | {r["id"] for r in page2["results"]}
+    assert len(ids) == 3  # pages don't overlap
+
+
+def test_aggregate_empty_group_by_is_grand_total(indexed_db):
+    from legistar_mcp.tools.bills import aggregate_bills
+    out = aggregate_bills(indexed_db, group_by=[])
+    assert out["results"] == [{"count": 3}]
+
+
+def test_space_separated_timestamp_includes_the_whole_day(indexed_db):
+    """'2024-08-15 23:59:59' (space form) previously lex-excluded every
+    '...T...' row on that day; normalization makes both forms equivalent."""
+    t_form = search_events(indexed_db, date_to="2024-08-15T23:59:59")
+    space_form = search_events(indexed_db, date_to="2024-08-15 23:59:59")
+    assert space_form["total"] == t_form["total"]

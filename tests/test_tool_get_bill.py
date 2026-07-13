@@ -33,3 +33,50 @@ def test_get_bill_includes_legistar_url(indexed_db):
         "https://legistar.council.nyc.gov/gateway.aspx"
         f"?m=l&id=/matter.aspx?key={bill['ID']}"
     )
+
+
+def test_get_bill_text_targeted_passage(indexed_db):
+    conn, root = indexed_db
+    from legistar_mcp.tools.bills import get_bill_text
+
+    out = get_bill_text(
+        conn, root, file="Int 0153-2022",
+        query="office of operations", context_chars=200,
+    )
+    assert out["file"] == "Int 0153-2022"
+    assert out["segments"], "phrase occurs in the bill text"
+    assert all("office of operations" in s["text"].lower() for s in out["segments"])
+    assert all(len(s["text"]) <= 200 * 2 + len("office of operations") for s in out["segments"])
+
+
+def test_get_bill_text_head_mode_bounds_output(indexed_db):
+    conn, root = indexed_db
+    from legistar_mcp.tools.bills import get_bill_text
+
+    out = get_bill_text(conn, root, file="Int 0153-2022", context_chars=500)
+    assert len(out["segments"]) == 1
+    assert out["segments"][0]["offset"] == 0
+    assert len(out["segments"][0]["text"]) <= 1000
+    assert out["total_chars"] > 0
+
+
+def test_get_bill_text_no_match_returns_empty_segments(indexed_db):
+    conn, root = indexed_db
+    from legistar_mcp.tools.bills import get_bill_text
+
+    out = get_bill_text(conn, root, file="Int 0153-2022", query="zzzunfindable")
+    assert out["segments"] == [] and out["total_chars"] > 0
+
+
+def test_get_bill_text_truncated_not_fooled_by_overlapping_windows(indexed_db):
+    conn, root = indexed_db
+    from legistar_mcp.tools.bills import get_bill_text
+    # A common word with huge context windows produces heavily overlapping
+    # segments; summed lengths exceed total_chars while real text remains
+    # uncovered. Interval-union coverage must still report truncated=True.
+    out = get_bill_text(
+        conn, root, file="Int 0153-2022",
+        query="the", context_chars=5000,
+    )
+    assert sum(len(s["text"]) for s in out["segments"]) > out["total_chars"]
+    assert out["truncated"] is True

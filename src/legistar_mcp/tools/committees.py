@@ -1,14 +1,14 @@
 from sqlite3 import Connection
 
 from ._aggregate import year_window
-from ._validate import validate_year
+from ._validate import envelope, validate_year
 
 
 def list_committees(
     conn: Connection,
     year_from: int | None = None,
     year_to: int | None = None,
-) -> list[dict]:
+) -> dict:
     """All committees with bill/event counts and first-seen dates.
 
     Optional year_from / year_to restrict both bill_count and event_count to
@@ -64,4 +64,5 @@ def list_committees(
         GROUP BY name
         ORDER BY (bill_count + event_count) DESC, name ASC
     """
-    return [dict(r) for r in conn.execute(sql, bill_params + event_params).fetchall()]
+    rows = [dict(r) for r in conn.execute(sql, bill_params + event_params).fetchall()]
+    return envelope(rows, len(rows))
